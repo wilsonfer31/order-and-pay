@@ -1,0 +1,12 @@
+{
+  "name": "Order & Pay",
+  "short_name": "Order&Pay",
+  "theme_color": "#3f51b5",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "scope": "/",
+  "start_url": "/",
+  "icons": [
+    { "src": "assets/icon/favicon.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable any" }
+  ]
+}

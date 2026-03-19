@@ -1,0 +1,36 @@
+@import "@ionic/angular/css/core.css";
+@import "@ionic/angular/css/normalize.css";
+@import "@ionic/angular/css/structure.css";
+@import "@ionic/angular/css/typography.css";
+@import "@ionic/angular/css/display.css";
+@import "@ionic/angular/css/padding.css";
+@import "@ionic/angular/css/float-elements.css";
+@import "@ionic/angular/css/text-alignment.css";
+@import "@ionic/angular/css/text-transformation.css";
+@import "@ionic/angular/css/flex-utils.css";
+
+:root {
+  --ion-color-primary: #3f51b5;
+  --ion-color-primary-rgb: 63,81,181;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+}
+
+/* Forcer la hauteur plein écran pour Ionic PWA dans un navigateur desktop/mobile */
+html, body {
+  height: 100% !important;
+  width: 100% !important;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+ion-app {
+  height: 100vh !important;
+  width: 100vw !important;
+}
+
+/* Rendre ion-content scrollable sur desktop également */
+ion-content::part(scroll) {
+  overflow-y: auto !important;
+}

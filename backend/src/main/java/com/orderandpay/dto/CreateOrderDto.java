@@ -9,6 +9,7 @@ import java.util.UUID;
 
 public record CreateOrderDto(
         @NotNull  UUID   tableId,
+        String           tableToken,  // QR token — requis pour les commandes CLIENT_APP
         String           source,      // WAITER | CLIENT_APP | KIOSK
         Short            guestCount,
         String           notes,

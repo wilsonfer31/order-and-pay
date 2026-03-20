@@ -16,5 +16,6 @@ public record ProductSaveDto(
     BigDecimal costPrice,
     boolean upsell,
     boolean available,
-    short sortOrder
+    short sortOrder,
+    String imageUrl
 ) {}

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker info:*)",
+      "Bash(docker-compose:*)",
+      "Bash(grep:*)",
+      "Bash(docker compose:*)",
+      "Bash(node_modules/.bin/tsc:*)",
+      "Bash(node_modules/@angular/compiler-cli/bin/ngc:*)",
+      "Bash(ls not:*)"
+    ]
+  }
+}

@@ -13,6 +13,7 @@ export class CartService {
 
   tableId    = signal('');
   tableLabel = signal('');
+  tableToken = signal('');
 
   readonly totalItems = computed(() =>
     this.items().reduce((sum, i) => sum + i.quantity, 0)
@@ -24,9 +25,10 @@ export class CartService {
 
   readonly cartItems = this.items.asReadonly();
 
-  initTable(tableId: string, label: string): void {
+  initTable(tableId: string, label: string, token: string = ''): void {
     this.tableId.set(tableId);
     this.tableLabel.set(label);
+    this.tableToken.set(token);
   }
 
   add(product: Product, qty = 1): void {
@@ -68,8 +70,9 @@ export class CartService {
 
   toOrderPayload() {
     return {
-      tableId: this.tableId(),
-      source: 'CLIENT_APP',
+      tableId:    this.tableId(),
+      tableToken: this.tableToken(),
+      source:     'CLIENT_APP',
       lines: this.items().map(i => ({
         productId: i.product.id,
         quantity:  i.quantity,

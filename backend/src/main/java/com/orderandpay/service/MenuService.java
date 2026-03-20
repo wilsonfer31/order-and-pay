@@ -20,7 +20,7 @@ public class MenuService {
     private final ProductRepository  productRepository;
 
     /** Mis en cache 5 min — invalidé si le catalogue change. */
-    @Cacheable(value = "menu", key = "#table.restaurant.id")
+    @Cacheable(value = "menu", key = "#table.id")
     public MenuResponseDto buildMenuResponse(RestaurantTable table) {
         List<Category> categories = categoryRepository
                 .findByRestaurantIdAndVisibleTrueOrderBySortOrder(table.getRestaurant().getId());

@@ -44,6 +44,8 @@ public class SecurityConfig {
                 .requestMatchers("/auth/**").permitAll()
                 // QR scan public (lecture du menu + soumission commande client)
                 .requestMatchers("/public/**").permitAll()
+                // Fichiers uploadés (images produits)
+                .requestMatchers("/uploads/**").permitAll()
                 // WebSocket (auth via WsAuthInterceptor)
                 .requestMatchers("/ws/**").permitAll()
                 // Toutes les autres routes nécessitent une auth

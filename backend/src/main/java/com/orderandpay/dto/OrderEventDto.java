@@ -29,6 +29,11 @@ public record OrderEventDto(
                 null, status, lineId, productName, Instant.now());
     }
 
+    public static OrderEventDto orderStatusChanged(UUID restaurantId, UUID orderId, UUID tableId, String tableLabel, Order.OrderStatus status) {
+        return new OrderEventDto("ORDER_STATUS_CHANGED", restaurantId, orderId, tableId, tableLabel,
+                status, null, null, null, Instant.now());
+    }
+
     public static OrderEventDto orderPaid(UUID restaurantId, UUID orderId) {
         return new OrderEventDto("ORDER_PAID", restaurantId, orderId, null, null,
                 Order.OrderStatus.PAID, null, null, null, Instant.now());

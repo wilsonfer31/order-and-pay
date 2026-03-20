@@ -31,6 +31,7 @@ interface Product {
   available: boolean;
   upsell: boolean;
   sortOrder: number;
+  imageUrl?: string | null;
 }
 
 @Component({
@@ -119,6 +120,9 @@ interface Product {
           @for (p of filteredProducts(); track p.id) {
             <div class="product-card" [class.product-card--unavailable]="!p.available">
               <div class="product-card__body">
+                @if (p.imageUrl) {
+                  <img [src]="p.imageUrl" [alt]="p.name" class="product-card__thumb" />
+                }
                 <div class="product-card__info">
                   <div class="product-card__name">
                     {{ p.name }}
@@ -213,6 +217,41 @@ interface Product {
               <div class="form-toggles">
                 <mat-slide-toggle formControlName="available" color="primary">Disponible</mat-slide-toggle>
                 <mat-slide-toggle formControlName="upsell" color="accent">Upselling</mat-slide-toggle>
+              </div>
+
+              <!-- Image du plat -->
+              <div class="img-upload-section">
+                @if (currentImageUrl()) {
+                  <img [src]="currentImageUrl()!" class="img-preview" alt="Aperçu" />
+                } @else {
+                  <div class="img-placeholder">
+                    <mat-icon>image</mat-icon>
+                    <span>Aucune image</span>
+                  </div>
+                }
+                @if (editingProduct()?.id) {
+                  <div class="img-actions">
+                    <input #fileInput type="file" accept="image/*" style="display:none"
+                           (change)="uploadImage($event)" />
+                    <button mat-stroked-button type="button" [disabled]="uploadingImage()"
+                            (click)="fileInput.click()">
+                      @if (uploadingImage()) {
+                        <mat-spinner diameter="16" style="display:inline-block;margin-right:6px"></mat-spinner>
+                      } @else {
+                        <mat-icon>upload</mat-icon>
+                      }
+                      {{ currentImageUrl() ? 'Changer' : 'Ajouter une image' }}
+                    </button>
+                    @if (currentImageUrl()) {
+                      <button mat-icon-button type="button" color="warn" title="Supprimer l'image"
+                              (click)="removeImage()">
+                        <mat-icon>delete</mat-icon>
+                      </button>
+                    }
+                  </div>
+                } @else {
+                  <p class="img-hint">Créez le plat puis modifiez-le pour ajouter une image.</p>
+                }
               </div>
 
               <div class="form-panel__footer">
@@ -458,6 +497,30 @@ interface Product {
       border-top: 1px solid #e5e7eb;
       margin-top: auto;
     }
+
+    .img-upload-section {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .img-preview {
+      width: 100%; height: 160px; object-fit: cover; display: block;
+    }
+    .img-placeholder {
+      height: 120px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 8px;
+      background: #f9fafb; color: #9ca3af;
+      mat-icon { font-size: 36px; width: 36px; height: 36px; }
+      span { font-size: 13px; }
+    }
+    .img-actions {
+      display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+      background: #f9fafb; border-top: 1px solid #e5e7eb;
+      button:first-of-type { flex: 1; }
+    }
+    .img-hint { font-size: 11px; color: #9ca3af; text-align: center; padding: 8px 12px; margin: 0; }
+
+    .product-card__thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
   `]
 })
 export class MenuCmsComponent implements OnInit {
@@ -469,6 +532,8 @@ export class MenuCmsComponent implements OnInit {
   panelMode       = signal<'product' | 'category' | null>(null);
   editingProduct  = signal<Product | null>(null);
   editingCategory = signal<Category | null>(null);
+  uploadingImage  = signal(false);
+  currentImageUrl = signal<string | null>(null);
 
   filteredProducts = computed(() => {
     const catId = this.selectedCategoryId();
@@ -509,12 +574,15 @@ export class MenuCmsComponent implements OnInit {
 
   private loadAll(): void {
     this.loading.set(true);
-    this.http.get<Category[]>('/categories').subscribe(cats => {
-      this.categories.set(cats);
-      this.http.get<Product[]>('/products').subscribe({
-        next:  prods => { this.products.set(prods); this.loading.set(false); },
-        error: ()    => this.loading.set(false),
-      });
+    this.http.get<Category[]>('/categories').subscribe({
+      next: cats => {
+        this.categories.set(cats);
+        this.http.get<Product[]>('/products').subscribe({
+          next:  prods => { this.products.set(prods); this.loading.set(false); },
+          error: ()    => { this.loading.set(false); this.snack.open('Erreur lors du chargement des produits', 'Fermer', { duration: 4000 }); },
+        });
+      },
+      error: () => { this.loading.set(false); this.snack.open('Erreur lors du chargement des catégories', 'Fermer', { duration: 4000 }); },
     });
   }
 
@@ -586,14 +654,16 @@ export class MenuCmsComponent implements OnInit {
       available:   p?.available   ?? true,
       upsell:      p?.upsell      ?? false,
     });
+    this.currentImageUrl.set(p?.imageUrl ?? null);
   }
 
   saveProduct(): void {
     if (this.productForm.invalid) return;
     this.saving.set(true);
     const v   = this.productForm.value;
-    const dto = { ...v, sortOrder: 0 };
     const p   = this.editingProduct();
+    const maxSort = p?.id ? p.sortOrder : this.products().reduce((max, x) => Math.max(max, x.sortOrder), -1);
+    const dto = { ...v, sortOrder: p?.id ? maxSort : maxSort + 1 };
     const req$ = p?.id
       ? this.http.put<Product>(`/products/${p.id}`, dto)
       : this.http.post<Product>('/products', dto);
@@ -610,6 +680,48 @@ export class MenuCmsComponent implements OnInit {
         this.snack.open(p?.id ? 'Plat mis à jour' : 'Plat créé', '', { duration: 2500 });
       },
       error: () => { this.saving.set(false); this.snack.open('Erreur lors de la sauvegarde', 'Fermer', { duration: 4000 }); }
+    });
+  }
+
+  uploadImage(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    const productId = this.editingProduct()?.id;
+    if (!productId) return;
+
+    this.uploadingImage.set(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    this.http.post<{ imageUrl: string }>(`/products/${productId}/image`, formData).subscribe({
+      next: res => {
+        this.currentImageUrl.set(res.imageUrl);
+        this.products.update(list =>
+          list.map(p => p.id === productId ? { ...p, imageUrl: res.imageUrl } : p)
+        );
+        this.uploadingImage.set(false);
+        this.snack.open('Image mise à jour', '', { duration: 2000 });
+      },
+      error: () => {
+        this.uploadingImage.set(false);
+        this.snack.open('Erreur lors de l\'upload', 'Fermer', { duration: 4000 });
+      }
+    });
+    input.value = '';
+  }
+
+  removeImage(): void {
+    const productId = this.editingProduct()?.id;
+    if (!productId) return;
+    const dto = { ...this.productForm.value, imageUrl: null, sortOrder: this.editingProduct()!.sortOrder };
+    this.http.put<Product>(`/products/${productId}`, dto).subscribe({
+      next: saved => {
+        this.currentImageUrl.set(null);
+        this.products.update(list => list.map(p => p.id === saved.id ? saved : p));
+        this.snack.open('Image supprimée', '', { duration: 2000 });
+      },
+      error: () => this.snack.open('Erreur', 'Fermer', { duration: 3000 })
     });
   }
 

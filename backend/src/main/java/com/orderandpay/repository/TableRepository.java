@@ -11,4 +11,6 @@ public interface TableRepository extends JpaRepository<RestaurantTable, UUID> {
     Optional<RestaurantTable> findByQrToken(String token);
     Optional<RestaurantTable> findByLabelIgnoreCase(String label);
     Optional<RestaurantTable> findByIdAndRestaurantId(UUID id, UUID restaurantId);
+    Optional<RestaurantTable> findByIdAndQrToken(UUID id, String qrToken);
+    List<RestaurantTable> findAllByOrderByLabel();
 }

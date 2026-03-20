@@ -22,5 +22,10 @@ export const routes: Routes = [
     loadComponent: () => import('./features/menu-cms/menu-cms.component').then(m => m.MenuCmsComponent),
     canActivate: [authGuard]
   },
+  {
+    path: 'kitchen',
+    loadComponent: () => import('./features/kitchen/kitchen.component').then(m => m.KitchenComponent),
+    canActivate: [authGuard]
+  },
   { path: '**', redirectTo: 'dashboard' }
 ];

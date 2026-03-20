@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
@@ -42,8 +43,11 @@ public class ProfitabilityService {
     // ── Implémentation ────────────────────────────────────────────────────────
 
     private ProfitabilityReportDto buildReport(UUID restaurantId, LocalDate from, LocalDate to) {
+        ZoneId utc = ZoneId.of("UTC");
+        Instant fromInstant = from.atStartOfDay(utc).toInstant();
+        Instant toInstant   = to.plusDays(1).atStartOfDay(utc).toInstant();
         List<Order> orders = orderRepository.findPaidOrdersByRestaurantAndDateRange(
-                restaurantId, from.atStartOfDay(), to.plusDays(1).atStartOfDay());
+                restaurantId, fromInstant, toInstant);
 
         BigDecimal revenueHt       = BigDecimal.ZERO;
         BigDecimal revenueTtc      = BigDecimal.ZERO;

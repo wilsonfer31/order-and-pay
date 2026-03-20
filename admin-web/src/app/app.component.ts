@@ -53,6 +53,12 @@ import { AuthService }       from './core/services/auth.service';
             <span>Plan de salle</span>
           </a>
         </li>
+        <li>
+          <a routerLink="/kitchen" routerLinkActive="active" class="nav-item">
+            <mat-icon>soup_kitchen</mat-icon>
+            <span>Cuisine</span>
+          </a>
+        </li>
       </ul>
 
       <div class="sidebar__footer">

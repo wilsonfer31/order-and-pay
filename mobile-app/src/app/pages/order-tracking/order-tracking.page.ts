@@ -4,6 +4,7 @@ import {
 } from '@angular/core';
 import { CommonModule }      from '@angular/common';
 import { ActivatedRoute }    from '@angular/router';
+import { HttpClient }        from '@angular/common/http';
 import {
   IonContent, IonHeader, IonToolbar, IonTitle,
   IonProgressBar, IonChip, IonLabel, IonCard, IonCardContent,
@@ -159,10 +160,12 @@ const STATUS_STEPS: OrderStatus[] = ['CONFIRMED', 'IN_PROGRESS', 'READY', 'DELIV
 })
 export class OrderTrackingPage implements OnInit, OnDestroy {
   private route   = inject(ActivatedRoute);
+  private http    = inject(HttpClient);
   private destroy$ = new Subject<void>();
   private stomp   = new RxStomp();
 
   order      = signal<OrderState | null>(null);
+  loadError  = signal(false);
   steps      = STATUS_STEPS;
 
   stepIndex = () => {
@@ -179,10 +182,21 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
     const orderId = this.route.snapshot.queryParams['orderId'];
     if (!orderId) return;
 
-    // Chargement initial de l'état
-    // (dans un vrai projet, HTTP GET /public/orders/:id)
+    // Chargement initial de l'état depuis le backend
+    this.http.get<OrderState>(`/public/orders/${orderId}`).subscribe({
+      next: state => {
+        this.order.set(state);
+        this.connectWebSocket(orderId);
+      },
+      error: () => {
+        this.loadError.set(true);
+        // Tente quand même le WebSocket pour capter les événements en direct
+        this.connectWebSocket(orderId);
+      }
+    });
+  }
 
-    // Connexion WebSocket pour les mises à jour temps réel
+  private connectWebSocket(orderId: string): void {
     this.stomp.configure({
       brokerURL: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws/websocket`,
       reconnectDelay: 5000,
@@ -199,10 +213,12 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
   }
 
   private applyEvent(event: any): void {
-    if (!this.order()) return;
     switch (event.eventType) {
       case 'ORDER_STATUS_CHANGED':
-        this.order.update(o => o ? { ...o, status: event.orderStatus } : o);
+        this.order.update(o => o
+          ? { ...o, status: event.orderStatus }
+          : { orderId: event.orderId, tableLabel: '', status: event.orderStatus, lines: [], totalTtc: 0 }
+        );
         break;
       case 'LINE_STATUS_CHANGED':
         this.order.update(o => o ? {

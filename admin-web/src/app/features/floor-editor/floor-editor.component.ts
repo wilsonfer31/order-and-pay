@@ -4,12 +4,14 @@ import {
 } from '@angular/core';
 import { CommonModule }    from '@angular/common';
 import { ActivatedRoute }  from '@angular/router';
+import { HttpClient }      from '@angular/common/http';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule }   from '@angular/material/icon';
 import { MatSnackBar }     from '@angular/material/snack-bar';
 import { Subject, switchMap, takeUntil } from 'rxjs';
 
 import { FloorEditorService, TableCell, GridCell } from './floor-editor.service';
+// TableCell and GridCell used in template and markClean method
 import { TablePropertiesPanelComponent }            from './table-properties-panel.component';
 
 @Component({
@@ -49,13 +51,15 @@ import { TablePropertiesPanelComponent }            from './table-properties-pan
 
       @for (row of service.grid(); track $index) {
         @for (cell of row; track $index) {
-          <!-- Cellule vide = zone de drop -->
+          <!-- Cellule vide = zone de drop ou clic pour placer -->
           @if (!cell.isOccupied) {
             <div class="grid-cell grid-cell--empty"
                  [attr.data-col]="cell.col"
                  [attr.data-row]="cell.row"
                  (dragover)="onDragOver($event)"
-                 (drop)="onDrop($event, cell)">
+                 (drop)="onDrop($event, cell)"
+                 (click)="onEmptyCellClick(cell)"
+                 title="Cliquer pour ajouter une table ici">
             </div>
           }
 
@@ -78,6 +82,13 @@ import { TablePropertiesPanelComponent }            from './table-properties-pan
                 <mat-icon style="font-size:12px">people</mat-icon>
                 {{ cell.table.capacity }}
               </span>
+              @if (cell.table.status === 'DIRTY') {
+                <button class="clean-btn" title="Marquer comme propre"
+                        (click)="$event.stopPropagation(); markClean(cell.table)">
+                  <mat-icon style="font-size:14px">cleaning_services</mat-icon>
+                  Propre
+                </button>
+              }
             </div>
           }
         }
@@ -166,12 +177,21 @@ import { TablePropertiesPanelComponent }            from './table-properties-pan
 
     .table-label    { font-size: 14px; font-weight: 700; }
     .table-capacity { font-size: 11px; opacity: .7; display: flex; align-items: center; }
+
+    .clean-btn {
+      margin-top: 4px; padding: 2px 6px;
+      background: #4caf50; color: white; border: none;
+      border-radius: 6px; font-size: 10px; font-weight: 700;
+      cursor: pointer; display: flex; align-items: center; gap: 2px;
+      &:hover { background: #388e3c; }
+    }
   `]
 })
 export class FloorEditorComponent implements OnInit, OnDestroy {
   readonly service = inject(FloorEditorService);
 
   private route    = inject(ActivatedRoute);
+  private http     = inject(HttpClient);
   private snackBar = inject(MatSnackBar);
   private destroy$ = new Subject<void>();
   private draggedTableId: string | null = null;
@@ -187,7 +207,16 @@ export class FloorEditorComponent implements OnInit, OnDestroy {
 
   addTable(): void {
     const label = `T${this.service.tables().length + 1}`;
-    this.service.addTable(label);
+    if (!this.service.addTable(label)) {
+      this.snackBar.open('Plus de place disponible dans la grille', '', { duration: 2000 });
+    }
+  }
+
+  onEmptyCellClick(cell: GridCell): void {
+    // Ignore si on est en train de drag
+    if (this.draggedTableId) return;
+    const label = `T${this.service.tables().length + 1}`;
+    this.service.addTable(label, cell.col, cell.row);
   }
 
   save(): void {
@@ -227,6 +256,18 @@ export class FloorEditorComponent implements OnInit, OnDestroy {
       this.snackBar.open('Position invalide ou déjà occupée', '', { duration: 1500 });
     }
     this.draggedTableId = null;
+  }
+
+  markClean(table: TableCell): void {
+    this.http.patch(`/floor-plans/tables/${table.id}/status`, null, { params: { status: 'FREE' } })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.service.updateTableProps(table.id, { status: 'FREE' });
+          this.snackBar.open(`Table ${table.label} marquée propre`, '', { duration: 2000 });
+        },
+        error: () => this.snackBar.open('Erreur lors de la mise à jour', 'Fermer', { duration: 3000 })
+      });
   }
 
   @HostListener('document:keydown.escape')

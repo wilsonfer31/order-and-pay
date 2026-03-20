@@ -69,4 +69,20 @@ public class FloorPlanController {
         }
         return ResponseEntity.noContent().build();
     }
+
+    /** Met à jour le statut d'une table (ex: DIRTY → FREE après nettoyage). */
+    @PatchMapping("/tables/{tableId}/status")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER','KITCHEN')")
+    public ResponseEntity<Void> updateTableStatus(
+            @PathVariable UUID tableId,
+            @RequestParam String status) {
+
+        RestaurantTable.TableStatus newStatus = RestaurantTable.TableStatus.valueOf(status.toUpperCase());
+        tableRepository.findByIdAndRestaurantId(tableId, TenantContext.getCurrentTenant())
+                .ifPresent(table -> {
+                    table.setStatus(newStatus);
+                    tableRepository.save(table);
+                });
+        return ResponseEntity.noContent().build();
+    }
 }

@@ -7,11 +7,16 @@ export interface TableInfo {
   label: string;
   qrToken?: string;
   status: string;
+  capacity?: number;
 }
 
 @Injectable({ providedIn: 'root' })
 export class TableService {
   constructor(private http: HttpClient) {}
+
+  listAll(): Observable<TableInfo[]> {
+    return this.http.get<TableInfo[]>('/public/tables');
+  }
 
   findByToken(token: string): Observable<TableInfo> {
     return this.http.get<TableInfo>(`/public/tables/by-token`, { params: { t: token } });

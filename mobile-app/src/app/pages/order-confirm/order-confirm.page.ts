@@ -6,13 +6,13 @@ import { CommonModule }      from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpClient }        from '@angular/common/http';
 import {
-  IonContent, IonHeader, IonToolbar, IonTitle,
+  IonContent, IonHeader, IonToolbar, IonTitle, IonButtons,
   IonButton, IonCard, IonCardContent, IonCardHeader, IonCardTitle,
   IonList, IonItem, IonLabel, IonIcon, IonFooter, IonNote,
   IonSpinner
 } from '@ionic/angular/standalone';
 import { addIcons }          from 'ionicons';
-import { addCircleOutline, removeCircleOutline, trashOutline, checkmarkOutline } from 'ionicons/icons';
+import { addCircleOutline, removeCircleOutline, trashOutline, checkmarkOutline, homeOutline } from 'ionicons/icons';
 import { CartService }       from '../../services/cart.service';
 
 @Component({
@@ -21,7 +21,7 @@ import { CartService }       from '../../services/cart.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     CommonModule,
-    IonContent, IonHeader, IonToolbar, IonTitle,
+    IonContent, IonHeader, IonToolbar, IonTitle, IonButtons,
     IonButton, IonCard, IonCardContent, IonCardHeader, IonCardTitle,
     IonList, IonItem, IonLabel, IonIcon, IonFooter, IonNote, IonSpinner
   ],
@@ -29,6 +29,11 @@ import { CartService }       from '../../services/cart.service';
 <ion-header>
   <ion-toolbar color="primary">
     <ion-title>Votre panier — {{ cart.tableLabel() }}</ion-title>
+    <ion-buttons slot="end">
+      <ion-button (click)="goHome()">
+        <ion-icon slot="icon-only" name="home-outline"></ion-icon>
+      </ion-button>
+    </ion-buttons>
   </ion-toolbar>
 </ion-header>
 
@@ -92,15 +97,14 @@ import { CartService }       from '../../services/cart.service';
         <ion-button fill="outline" color="medium" (click)="goBack()">
           Modifier
         </ion-button>
-        <ion-button color="success" [disabled]="submitting()" (click)="placeOrder()">
+        <button class="order-btn" [disabled]="submitting()" (click)="placeOrder()">
           @if (submitting()) {
-            <ion-spinner name="crescent" slot="start"></ion-spinner>
+            <ion-spinner name="crescent" style="width:18px;height:18px;margin-right:8px"></ion-spinner>
             Envoi...
           } @else {
-            <ion-icon slot="start" name="checkmark-outline"></ion-icon>
             Commander
           }
-        </ion-button>
+        </button>
       </div>
     </ion-toolbar>
   </ion-footer>
@@ -129,6 +133,14 @@ import { CartService }       from '../../services/cart.service';
       display: flex; gap: 8px; padding: 8px 16px;
       ion-button { flex: 1; }
     }
+    .order-btn {
+      flex: 1; padding: 12px 16px; border-radius: 8px;
+      background: #2dd36f; color: white;
+      border: none; font-size: 15px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      gap: 4px; cursor: pointer;
+      &:disabled { opacity: .6; cursor: not-allowed; }
+    }
   `]
 })
 export class OrderConfirmPage implements OnInit {
@@ -141,7 +153,7 @@ export class OrderConfirmPage implements OnInit {
   error      = signal<string | null>(null);
 
   constructor() {
-    addIcons({ addCircleOutline, removeCircleOutline, trashOutline, checkmarkOutline });
+    addIcons({ addCircleOutline, removeCircleOutline, trashOutline, checkmarkOutline, homeOutline });
   }
 
   ngOnInit(): void {}
@@ -152,6 +164,11 @@ export class OrderConfirmPage implements OnInit {
   goBack(): void {
     const t = this.route.snapshot.queryParams['t'];
     this.router.navigate(['/menu'], { queryParams: { t } });
+  }
+
+  goHome(): void {
+    this.cart.clear();
+    this.router.navigate(['/scan']);
   }
 
   placeOrder(): void {

@@ -155,19 +155,52 @@ export class FloorEditorService {
 
   // ── CRUD local ─────────────────────────────────────────────────────────────
 
-  addTable(label: string, col = 0, row = 0): void {
+  addTable(label: string, col?: number, row?: number): boolean {
+    let targetCol = col;
+    let targetRow = row;
+
+    // Si pas de position fournie, cherche la première cellule libre
+    if (targetCol === undefined || targetRow === undefined) {
+      const free = this.findFreeCell(1, 1);
+      if (!free) return false;
+      targetCol = free.col;
+      targetRow = free.row;
+    }
+
+    // Vérifie qu'il n'y a pas de conflit à cet endroit
+    const conflict = this.tables().some(t =>
+      this.overlaps(targetCol!, targetRow!, 1, 1, t.gridX, t.gridY, t.gridW, t.gridH)
+    );
+    if (conflict) return false;
+
     const newTable: TableCell = {
-      id: `new-${Date.now()}`,  // ID temporaire
+      id: `new-${Date.now()}`,
       label,
       capacity: 4,
-      gridX: col, gridY: row,
-      gridW: 1,   gridH: 1,
+      gridX: targetCol, gridY: targetRow,
+      gridW: 1, gridH: 1,
       shape: 'RECT',
       status: 'FREE'
     };
     this.tables.update(t => [...t, newTable]);
     this.selectedId.set(newTable.id);
     this.isDirty.set(true);
+    return true;
+  }
+
+  private findFreeCell(w: number, h: number): { col: number; row: number } | null {
+    const plan = this.floorPlan();
+    if (!plan) return null;
+    for (let r = 0; r < plan.gridRows; r++) {
+      for (let c = 0; c < plan.gridCols; c++) {
+        if (c + w > plan.gridCols || r + h > plan.gridRows) continue;
+        const conflict = this.tables().some(t =>
+          this.overlaps(c, r, w, h, t.gridX, t.gridY, t.gridW, t.gridH)
+        );
+        if (!conflict) return { col: c, row: r };
+      }
+    }
+    return null;
   }
 
   updateTableProps(tableId: string, props: Partial<TableCell>): void {

@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -33,9 +34,38 @@ public class OrderController {
     }
 
     @GetMapping
-    public List<Order> listActive() {
-        return orderRepository.findByRestaurantIdAndStatus(
-                TenantContext.getCurrentTenant(), Order.OrderStatus.CONFIRMED);
+    public List<Map<String, Object>> listActive() {
+        var statuses = List.of(
+            Order.OrderStatus.CONFIRMED,
+            Order.OrderStatus.IN_PROGRESS,
+            Order.OrderStatus.READY
+        );
+        return orderRepository.findActiveByRestaurantId(TenantContext.getCurrentTenant(), statuses)
+                .stream()
+                .map(o -> {
+                    var lines = o.getLines().stream()
+                            .filter(l -> l.getStatus() != OrderLine.LineStatus.CANCELLED)
+                            .map(l -> {
+                                java.util.LinkedHashMap<String, Object> lm = new java.util.LinkedHashMap<>();
+                                lm.put("id", l.getId().toString());
+                                lm.put("productName", l.getProduct().getName());
+                                lm.put("quantity", l.getQuantity());
+                                lm.put("status", l.getStatus().name());
+                                lm.put("notes", l.getNotes());
+                                return lm;
+                            })
+                            .toList();
+                    java.util.LinkedHashMap<String, Object> om = new java.util.LinkedHashMap<>();
+                    om.put("orderId", o.getId().toString());
+                    om.put("orderNumber", o.getOrderNumber());
+                    om.put("tableLabel", o.getTable() != null ? o.getTable().getLabel() : "");
+                    om.put("status", o.getStatus().name());
+                    om.put("totalTtc", o.getTotalTtc());
+                    om.put("confirmedAt", o.getConfirmedAt() != null ? o.getConfirmedAt().toString() : null);
+                    om.put("lines", lines);
+                    return (Map<String, Object>) om;
+                })
+                .toList();
     }
 
     @GetMapping("/{id}")
@@ -45,17 +75,32 @@ public class OrderController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('KITCHEN','MANAGER','OWNER')")
+    public ResponseEntity<Map<String, Object>> updateStatus(
+            @PathVariable UUID id,
+            @RequestParam String status) {
+        Order.OrderStatus newStatus = Order.OrderStatus.valueOf(status.toUpperCase());
+        Order order = orderService.updateOrderStatus(TenantContext.getCurrentTenant(), id, newStatus);
+        java.util.LinkedHashMap<String, Object> resp = new java.util.LinkedHashMap<>();
+        resp.put("orderId", order.getId().toString());
+        resp.put("status", order.getStatus().name());
+        return ResponseEntity.ok(resp);
+    }
+
     @PatchMapping("/{id}/lines/{lineId}/status")
     @PreAuthorize("hasAnyRole('KITCHEN','MANAGER','OWNER')")
-    public ResponseEntity<OrderLine> updateLineStatus(
+    public ResponseEntity<Map<String, Object>> updateLineStatus(
             @PathVariable UUID id,
             @PathVariable UUID lineId,
             @RequestParam  String status) {
 
         OrderLine.LineStatus newStatus = OrderLine.LineStatus.valueOf(status.toUpperCase());
-        return ResponseEntity.ok(
-                orderService.updateLineStatus(TenantContext.getCurrentTenant(), id, lineId, newStatus)
-        );
+        OrderLine line = orderService.updateLineStatus(TenantContext.getCurrentTenant(), id, lineId, newStatus);
+        java.util.LinkedHashMap<String, Object> resp = new java.util.LinkedHashMap<>();
+        resp.put("lineId", line.getId().toString());
+        resp.put("status", line.getStatus().name());
+        return ResponseEntity.ok(resp);
     }
 
     @PostMapping("/{id}/pay")

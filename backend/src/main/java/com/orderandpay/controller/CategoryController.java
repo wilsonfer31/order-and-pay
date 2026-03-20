@@ -8,6 +8,7 @@ import com.orderandpay.repository.RestaurantRepository;
 import com.orderandpay.security.TenantContext;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,7 @@ public class CategoryController {
     @PostMapping
     @PreAuthorize("hasAnyRole('OWNER','MANAGER')")
     @Transactional
+    @CacheEvict(value = "menu", allEntries = true)
     public ResponseEntity<Category> create(@Valid @RequestBody CategorySaveDto dto) {
         Restaurant restaurant = restaurantRepository.getReferenceById(TenantContext.getCurrentTenant());
         Category cat = new Category();
@@ -45,6 +47,7 @@ public class CategoryController {
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('OWNER','MANAGER')")
     @Transactional
+    @CacheEvict(value = "menu", allEntries = true)
     public ResponseEntity<Category> update(@PathVariable UUID id, @Valid @RequestBody CategorySaveDto dto) {
         return categoryRepository.findById(id)
                 .filter(c -> c.getRestaurant().getId().equals(TenantContext.getCurrentTenant()))
@@ -59,6 +62,7 @@ public class CategoryController {
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('OWNER','MANAGER')")
     @Transactional
+    @CacheEvict(value = "menu", allEntries = true)
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         var cat = categoryRepository.findById(id)
                 .filter(c -> c.getRestaurant().getId().equals(TenantContext.getCurrentTenant()));

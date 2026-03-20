@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
@@ -22,26 +23,36 @@ public class DashboardController {
     /** Rapport du jour courant — affiché en temps réel dans le dashboard Angular. */
     @GetMapping("/today")
     @PreAuthorize("hasAnyRole('OWNER','MANAGER','CASHIER')")
-    public ResponseEntity<ProfitabilityReportDto> today(
+    public ResponseEntity<?> today(
             @RequestParam(defaultValue = "Europe/Paris") String timezone) {
 
+        ZoneId zone;
+        try {
+            zone = ZoneId.of(timezone);
+        } catch (DateTimeException e) {
+            return ResponseEntity.badRequest().body("Timezone invalide: " + timezone);
+        }
+
         return ResponseEntity.ok(
-                profitabilityService.todayReport(
-                        TenantContext.getCurrentTenant(),
-                        ZoneId.of(timezone)));
+                profitabilityService.todayReport(TenantContext.getCurrentTenant(), zone));
     }
 
     /** Rapport sur période personnalisée. */
     @GetMapping("/report")
     @PreAuthorize("hasAnyRole('OWNER','MANAGER')")
-    public ResponseEntity<ProfitabilityReportDto> report(
+    public ResponseEntity<?> report(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "Europe/Paris") String timezone) {
 
+        ZoneId zone;
+        try {
+            zone = ZoneId.of(timezone);
+        } catch (DateTimeException e) {
+            return ResponseEntity.badRequest().body("Timezone invalide: " + timezone);
+        }
+
         return ResponseEntity.ok(
-                profitabilityService.periodReport(
-                        TenantContext.getCurrentTenant(), from, to,
-                        ZoneId.of(timezone)));
+                profitabilityService.periodReport(TenantContext.getCurrentTenant(), from, to, zone));
     }
 }

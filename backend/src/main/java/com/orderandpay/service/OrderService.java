@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -29,10 +30,19 @@ public class OrderService {
                 .findByIdAndRestaurantId(dto.tableId(), restaurantId)
                 .orElseThrow(() -> new IllegalArgumentException("Table introuvable"));
 
+        Order.OrderSource orderSource;
+        try {
+            orderSource = dto.source() != null
+                    ? Order.OrderSource.valueOf(dto.source())
+                    : Order.OrderSource.CLIENT_APP;
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Source invalide: " + dto.source());
+        }
+
         Order order = Order.builder()
                 .restaurant(table.getRestaurant())
                 .table(table)
-                .source(Order.OrderSource.valueOf(dto.source()))
+                .source(orderSource)
                 .guestCount(dto.guestCount())
                 .notes(dto.notes())
                 .status(Order.OrderStatus.CONFIRMED)
@@ -40,15 +50,23 @@ public class OrderService {
                 .build();
 
         for (CreateOrderDto.LineDto lineDto : dto.lines()) {
+            UUID productUUID;
+            try {
+                productUUID = UUID.fromString(lineDto.productId());
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("productId invalide: " + lineDto.productId());
+            }
+
+            // Utilise un verrou pessimiste pour les produits avec stock géré
             Product product = productRepository
-                    .findByIdAndRestaurantId(UUID.fromString(lineDto.productId()), restaurantId)
+                    .findByIdAndRestaurantIdForUpdate(productUUID, restaurantId)
                     .orElseThrow(() -> new IllegalArgumentException("Produit introuvable: " + lineDto.productId()));
 
             if (!product.isAvailable()) {
                 throw new IllegalStateException("Produit non disponible: " + product.getName());
             }
 
-            // Décrémente le stock si géré
+            // Décrémente le stock si géré (atomique grâce au verrou pessimiste)
             if (product.isStockManaged()) {
                 if (product.getStockQty() == null || product.getStockQty() < lineDto.quantity()) {
                     throw new IllegalStateException("Stock insuffisant: " + product.getName());
@@ -118,6 +136,60 @@ public class OrderService {
         }
 
         return line;
+    }
+
+    @Transactional
+    public Order updateOrderStatus(UUID restaurantId, UUID orderId, Order.OrderStatus newStatus) {
+        Order order = orderRepository.findByIdAndRestaurantId(orderId, restaurantId)
+                .orElseThrow(() -> new IllegalArgumentException("Commande introuvable"));
+
+        order.setStatus(newStatus);
+
+        // Quand la commande est servie, on la comptabilise dans le CA
+        if (newStatus == Order.OrderStatus.DELIVERED) {
+            order.setPaidAt(Instant.now());
+            if (order.getTable() != null) {
+                order.getTable().setStatus(RestaurantTable.TableStatus.DIRTY);
+                tableRepository.save(order.getTable());
+            }
+        }
+
+        Order saved = orderRepository.save(order);
+
+        var statusEvent = OrderEventDto.orderStatusChanged(restaurantId, orderId,
+                order.getTable() != null ? order.getTable().getId() : null,
+                order.getTable() != null ? order.getTable().getLabel() : null,
+                newStatus);
+        eventPublisher.notifyKitchen(restaurantId, statusEvent);
+        eventPublisher.notifyFloor(restaurantId, statusEvent);
+        eventPublisher.notifyClient(orderId, statusEvent);
+
+        // Notifie le dashboard pour rafraîchir le CA
+        if (newStatus == Order.OrderStatus.DELIVERED) {
+            eventPublisher.notifyDashboard(restaurantId,
+                    OrderEventDto.orderPaid(restaurantId, orderId));
+        }
+
+        return saved;
+    }
+
+    @Transactional
+    public void finalizeTableOrders(UUID tableId) {
+        List<Order> activeOrders = orderRepository.findActiveOrdersByTableId(tableId)
+                .stream()
+                .filter(o -> o.getStatus() != Order.OrderStatus.DELIVERED
+                          && o.getStatus() != Order.OrderStatus.PAID)
+                .toList();
+
+        for (Order order : activeOrders) {
+            order.setStatus(Order.OrderStatus.DELIVERED);
+            order.setPaidAt(Instant.now());
+            orderRepository.save(order);
+
+            UUID restaurantId = order.getRestaurant().getId();
+            eventPublisher.notifyDashboard(restaurantId,
+                    OrderEventDto.orderPaid(restaurantId, order.getId()));
+        }
     }
 
     @Transactional

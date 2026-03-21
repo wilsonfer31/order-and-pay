@@ -58,6 +58,9 @@
 
 <img width="1863" alt="Menu CMS" src="https://github.com/user-attachments/assets/7076d773-de89-4b59-91f1-ffb0860ac983" />
 
+<img width="1885" height="896" alt="image" src="https://github.com/user-attachments/assets/fb6cf0e4-7ee4-415a-b6fd-937e0eec7e92" />
+
+
 ---
 
 ## Lancer le projet

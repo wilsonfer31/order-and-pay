@@ -168,7 +168,7 @@ public class PublicMenuController {
 
         List<Map<String, Object>> orders = orderRepository.findActiveOrdersByTableId(table.getId())
                 .stream()
-                .filter(o -> o.getConfirmedAt() != null && o.getConfirmedAt().isAfter(sessionStart))
+                .filter(o -> o.getConfirmedAt() != null && !o.getConfirmedAt().isBefore(sessionStart.minusSeconds(1)))
                 .filter(o -> isDirty || (o.getStatus() != Order.OrderStatus.DELIVERED
                           && o.getStatus() != Order.OrderStatus.PAID))
                 .map(o -> {
@@ -236,6 +236,24 @@ public class PublicMenuController {
         java.util.LinkedHashMap<String, String> resp = new java.util.LinkedHashMap<>();
         resp.put("imageUrl", imageUrl);
         return ResponseEntity.ok(resp);
+    }
+
+    /** Annulation d'une commande par le client (uniquement si CONFIRMED — pas encore en cuisine). */
+    @DeleteMapping("/orders/{orderId}")
+    @org.springframework.transaction.annotation.Transactional
+    public ResponseEntity<?> cancelOrder(@PathVariable UUID orderId) {
+        Order order = orderRepository.findWithLinesById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Commande introuvable"));
+
+        if (order.getStatus() == Order.OrderStatus.DELIVERED
+                || order.getStatus() == Order.OrderStatus.PAID
+                || order.getStatus() == Order.OrderStatus.CANCELLED) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Impossible d'annuler une commande en statut " + order.getStatus()));
+        }
+
+        orderService.cancelOrder(order.getRestaurant().getId(), orderId);
+        return ResponseEntity.noContent().build();
     }
 
     /**

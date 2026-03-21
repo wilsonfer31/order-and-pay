@@ -11,12 +11,12 @@ import {
   IonIcon, IonList, IonItem
 } from '@ionic/angular/standalone';
 import { addIcons }          from 'ionicons';
-import { checkmarkCircle, time, timeOutline, restaurant, bicycle, homeOutline } from 'ionicons/icons';
+import { checkmarkCircle, time, timeOutline, restaurant, bicycle, homeOutline, closeCircle, alertCircle } from 'ionicons/icons';
 import { RxStomp }           from '@stomp/rx-stomp';
 import { Subject, takeUntil } from 'rxjs';
 import { map } from 'rxjs/operators';
 
-export type OrderStatus = 'CONFIRMED' | 'IN_PROGRESS' | 'READY' | 'DELIVERED';
+export type OrderStatus = 'CONFIRMED' | 'IN_PROGRESS' | 'READY' | 'DELIVERED' | 'CANCELLED';
 
 export interface OrderLine {
   id: string;
@@ -62,7 +62,16 @@ const STATUS_STEPS: OrderStatus[] = ['CONFIRMED', 'IN_PROGRESS', 'READY', 'DELIV
 
 <ion-content class="ion-padding">
 
-  @if (order()) {
+  @if (order()?.status === 'CANCELLED') {
+    <div class="cancelled-banner">
+      <ion-icon name="close-circle" style="font-size:48px;color:#ef4444"></ion-icon>
+      <h2>Commande annulée</h2>
+      <p>Cette commande a été annulée.</p>
+      <ion-button expand="block" color="primary" (click)="goHome()">Retour à l'accueil</ion-button>
+    </div>
+  }
+
+  @if (order() && order()?.status !== 'CANCELLED') {
     <!-- Barre de progression -->
     <div class="status-steps">
       @for (step of steps; track step; let i = $index) {
@@ -124,6 +133,16 @@ const STATUS_STEPS: OrderStatus[] = ['CONFIRMED', 'IN_PROGRESS', 'READY', 'DELIV
         </div>
       </ion-card-content>
     </ion-card>
+
+    <!-- Bouton annulation (serveur peut annuler si pas encore livré) -->
+    @if (order()?.status === 'CONFIRMED' || order()?.status === 'IN_PROGRESS') {
+      <ion-button expand="block" fill="outline" color="danger"
+                  style="margin-top: 16px"
+                  (click)="confirmCancel()">
+        <ion-icon slot="start" name="close-circle"></ion-icon>
+        Annuler ma commande
+      </ion-button>
+    }
   }
 
 </ion-content>
@@ -189,6 +208,18 @@ const STATUS_STEPS: OrderStatus[] = ['CONFIRMED', 'IN_PROGRESS', 'READY', 'DELIV
       font-size: 16px;
       strong { color: #F97316; font-size: 18px; }
     }
+
+    .cancelled-banner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 48px 24px;
+      gap: 12px;
+      h2 { font-size: 22px; font-weight: 700; color: #ef4444; margin: 0; }
+      p  { color: #78716C; margin: 0; }
+    }
   `]
 })
 export class OrderTrackingPage implements OnInit, OnDestroy {
@@ -208,8 +239,10 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
     return STATUS_STEPS.indexOf(o.status);
   };
 
+  cancelInFlight = signal(false);
+
   constructor() {
-    addIcons({ checkmarkCircle, time, timeOutline, restaurant, bicycle, homeOutline });
+    addIcons({ checkmarkCircle, time, timeOutline, restaurant, bicycle, homeOutline, closeCircle, alertCircle });
   }
 
   ngOnInit(): void {
@@ -253,6 +286,9 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
           ? { ...o, status: event.orderStatus }
           : { orderId: event.orderId, tableLabel: '', status: event.orderStatus, lines: [], totalTtc: 0 }
         );
+        if (event.orderStatus === 'CANCELLED') {
+          this.stomp.deactivate();
+        }
         break;
       case 'LINE_STATUS_CHANGED':
         this.order.update(o => o ? {
@@ -263,6 +299,25 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
         } : o);
         break;
     }
+  }
+
+  confirmCancel(): void {
+    if (!confirm('Annuler votre commande ? Cette action est irréversible.')) return;
+    const orderId = this.order()?.orderId;
+    if (!orderId || this.cancelInFlight()) return;
+    this.cancelInFlight.set(true);
+    this.http.delete(`/public/orders/${orderId}`).subscribe({
+      next: () => {
+        this.order.update(o => o ? { ...o, status: 'CANCELLED' } : o);
+        this.stomp.deactivate();
+        this.cancelInFlight.set(false);
+      },
+      error: (err) => {
+        const msg = err?.error?.error ?? 'Impossible d\'annuler cette commande.';
+        alert(msg);
+        this.cancelInFlight.set(false);
+      }
+    });
   }
 
   goHome(): void {
@@ -279,18 +334,19 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
       case 'IN_PROGRESS': return 'La cuisine prépare vos plats... 👨‍🍳';
       case 'READY':       return 'C\'est prêt ! Votre serveur arrive 🍽️';
       case 'DELIVERED':   return 'Bon appétit ! 🎉';
+      case 'CANCELLED':   return 'Commande annulée.';
       default:            return '';
     }
   }
 
   stepIcon(step: OrderStatus): string {
-    return { CONFIRMED: 'checkmark-circle', IN_PROGRESS: 'time',
-             READY: 'restaurant', DELIVERED: 'bicycle' }[step];
+    return ({ CONFIRMED: 'checkmark-circle', IN_PROGRESS: 'time',
+              READY: 'restaurant', DELIVERED: 'bicycle', CANCELLED: 'close-circle' } as Record<string, string>)[step] ?? 'time';
   }
 
   stepLabel(step: OrderStatus): string {
-    return { CONFIRMED: 'Confirmée', IN_PROGRESS: 'En cours',
-             READY: 'Prête', DELIVERED: 'Servie' }[step];
+    return ({ CONFIRMED: 'Confirmée', IN_PROGRESS: 'En cours',
+              READY: 'Prête', DELIVERED: 'Servie', CANCELLED: 'Annulée' } as Record<string, string>)[step] ?? step;
   }
 
   lineIcon(status: string): string {

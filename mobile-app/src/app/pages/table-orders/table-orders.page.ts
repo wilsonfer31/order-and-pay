@@ -2,6 +2,7 @@ import {
   Component, OnInit, OnDestroy,
   ChangeDetectionStrategy, signal, inject, computed
 } from '@angular/core';
+import { ViewWillEnter } from '@ionic/angular';
 import { CommonModule }   from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpClient }     from '@angular/common/http';
@@ -109,6 +110,14 @@ interface TableOrder {
           <div class="order-total">
             Total : <strong>{{ order.totalTtc | currency:'EUR':'symbol':'1.2-2':'fr' }}</strong>
           </div>
+          @if (order.status === 'CONFIRMED' || order.status === 'IN_PROGRESS') {
+            <ion-button expand="block" fill="outline" color="danger" size="small"
+                        style="margin-top: 8px"
+                        (click)="cancelOrder(order)">
+              <ion-icon slot="start" name="close-circle"></ion-icon>
+              Annuler la commande
+            </ion-button>
+          }
         </ion-card-content>
       </ion-card>
     }
@@ -180,7 +189,7 @@ interface TableOrder {
     }
   `]
 })
-export class TableOrdersPage implements OnInit, OnDestroy {
+export class TableOrdersPage implements OnInit, OnDestroy, ViewWillEnter {
   private route   = inject(ActivatedRoute);
   private router  = inject(Router);
   private http    = inject(HttpClient);
@@ -200,6 +209,11 @@ export class TableOrdersPage implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    const t = this.route.snapshot.queryParams['t'] ?? '';
+    this.tableToken.set(t);
+  }
+
+  ionViewWillEnter(): void {
     const t = this.route.snapshot.queryParams['t'] ?? '';
     this.tableToken.set(t);
     this.loadOrders(t);
@@ -234,10 +248,24 @@ export class TableOrdersPage implements OnInit, OnDestroy {
     }
   }
 
+  cancelOrder(order: TableOrder): void {
+    if (!confirm('Annuler cette commande ?')) return;
+    this.http.delete(`/public/orders/${order.orderId}`).subscribe({
+      next: () => {
+        this.orders.update(list => list.filter(o => o.orderId !== order.orderId));
+      },
+      error: (err) => {
+        alert(err?.error?.error ?? 'Impossible d\'annuler cette commande.');
+      }
+    });
+  }
+
   private applyEvent(event: any): void {
     if (event.eventType === 'ORDER_STATUS_CHANGED') {
       this.orders.update(list =>
-        list.map(o => o.orderId === event.orderId ? { ...o, status: event.orderStatus } : o)
+        event.orderStatus === 'CANCELLED'
+          ? list.filter(o => o.orderId !== event.orderId)
+          : list.map(o => o.orderId === event.orderId ? { ...o, status: event.orderStatus } : o)
       );
     } else if (event.eventType === 'LINE_STATUS_CHANGED') {
       this.orders.update(list =>

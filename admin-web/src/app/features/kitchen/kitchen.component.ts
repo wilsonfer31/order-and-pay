@@ -91,6 +91,9 @@ interface KitchenTicket {
           <button class="action-btn action-btn--primary" (click)="launchTicket(ticket)">
             <mat-icon>play_arrow</mat-icon> Prendre en charge
           </button>
+          <button class="action-btn action-btn--cancel" (click)="cancelOrder(ticket)">
+            <mat-icon>cancel</mat-icon> Annuler commande
+          </button>
         </div>
       }
       @if (pendingTickets().length === 0) {
@@ -127,6 +130,9 @@ interface KitchenTicket {
           @if (ticket.notes) { <div class="ticket__notes">{{ ticket.notes }}</div> }
           <button class="action-btn action-btn--warn" (click)="readyTicket(ticket)">
             <mat-icon>check</mat-icon> Prêt
+          </button>
+          <button class="action-btn action-btn--cancel" (click)="cancelOrder(ticket)">
+            <mat-icon>cancel</mat-icon> Annuler commande
           </button>
         </div>
       }
@@ -287,6 +293,8 @@ interface KitchenTicket {
     .action-btn--warn:hover { background: #92400e; }
     .action-btn--success { background: #15803d; color: white; }
     .action-btn--success:hover { background: #166534; }
+    .action-btn--cancel { background: #1e293b; color: #f87171; border: 1px solid #7f1d1d; margin-top: 4px; }
+    .action-btn--cancel:hover { background: #7f1d1d; color: white; }
   `]
 })
 export class KitchenComponent implements OnInit, OnDestroy {
@@ -386,10 +394,14 @@ export class KitchenComponent implements OnInit, OnDestroy {
     if (event.eventType === 'ORDER_CREATED') {
       this.loadOrders();
     } else if (event.eventType === 'ORDER_STATUS_CHANGED') {
-      this.orders.update(list =>
-        list.map(o => o.orderId === event.orderId ? { ...o, status: event.orderStatus } : o)
-          .filter(o => o.status !== 'DELIVERED' && o.status !== 'PAID')
-      );
+      const terminal = ['DELIVERED', 'PAID', 'CANCELLED'];
+      if (terminal.includes(event.orderStatus)) {
+        this.orders.update(list => list.filter(o => o.orderId !== event.orderId));
+      } else {
+        this.orders.update(list =>
+          list.map(o => o.orderId === event.orderId ? { ...o, status: event.orderStatus } : o)
+        );
+      }
     } else if (event.eventType === 'LINE_STATUS_CHANGED') {
       this.orders.update(list =>
         list.map(o => {
@@ -442,6 +454,16 @@ export class KitchenComponent implements OnInit, OnDestroy {
   launchTicket(ticket: KitchenTicket): void  { this.patchLineStatus(ticket, 'COOKING'); }
   readyTicket(ticket: KitchenTicket): void   { this.patchLineStatus(ticket, 'READY'); }
   serveTicket(ticket: KitchenTicket): void   { this.patchLineStatus(ticket, 'SERVED'); }
+
+  cancelOrder(ticket: KitchenTicket): void {
+    if (!confirm(`Annuler la commande #${ticket.orderNumber ?? ''} table ${ticket.tableLabel} ?`)) return;
+    this.http.delete(`/orders/${ticket.orderId}`).subscribe({
+      next: () => {
+        this.orders.update(list => list.filter(o => o.orderId !== ticket.orderId));
+      },
+      error: () => {}
+    });
+  }
 
   ngOnDestroy(): void {
     this.destroy$.next();

@@ -19,6 +19,10 @@ Database: PostgreSQL 16, managed by Flyway migrations.
 ```bash
 docker-compose up --build
 ```
+Always use `--no-cache` when a code change isn't being picked up:
+```bash
+docker-compose build --no-cache && docker-compose up -d
+```
 Services:
 - Mobile app: http://localhost:8101
 - Admin web: http://localhost:4201
@@ -64,24 +68,51 @@ Every request is scoped to a restaurant (tenant) via `TenantFilter` → `TenantC
 ### Real-time order updates
 `OrderEventPublisher` broadcasts events over STOMP when order status changes. Admin web subscribes via `websocket.service.ts`; mobile app's order-tracking page also subscribes directly.
 
+**WebSocket endpoint:** `/api/ws` (plain WebSocket — SockJS is NOT used). Both frontends connect using `brokerURL: ws://host/api/ws`. Do NOT add `.withSockJS()` to `OrderWebSocketConfig` — this caused STOMP CONNECT headers to be silently dropped.
+
+**Topics:**
+- `/topic/kitchen/{restaurantId}` — kitchen screen
+- `/topic/floor/{restaurantId}` — floor/room view
+- `/topic/client/{orderId}` — mobile order tracking
+- `/topic/dashboard/{restaurantId}` — admin dashboard real-time feed
+- `/topic/tables/{restaurantId}` — table status updates
+
+**OrderEventDto** includes a `lines` field (list of `LineItem(name, quantity)`) populated only for `ORDER_CREATED` events, so the dashboard can show order contents without an extra HTTP call.
+
 ### Order lifecycle
 `DRAFT → CONFIRMED → IN_PROGRESS → READY → DELIVERED → PAID`
 State transitions live in `OrderService.java`.
 
+### Table session tracking
+Each table has a `session_started_at` timestamp (added in `V3__add_table_session.sql`). It is set when a table first becomes OCCUPIED. The mobile app filters orders by this timestamp to avoid showing orders from previous sessions.
+
 ### Public (unauthenticated) endpoints
-`PublicMenuController` serves the menu for a given table token (from QR code). The mobile app does not require login.
+`PublicMenuController` serves the menu, handles order placement, and manages table status for the mobile app. The mobile app does not require login. Orders are placed via `POST /public/orders`.
 
 ### Database migrations
 Flyway runs on startup. Migration files in `backend/src/main/resources/db/migration/`:
 - `V1__init_schema.sql` — full schema (UUID PKs, indexes, 13+ tables)
 - `V2__seed_demo.sql` — demo restaurant, users, and menu data
+- `V3__add_table_session.sql` — adds `session_started_at` column to `tables`
 
 ### Tax calculations
 French TVA rates (5.5%, 10%, 20%) are computed in `TaxService.java` and applied per `OrderLine`.
+
+## Admin Web Features
+
+- **Dashboard** (`/`) — KPI cards (CA TTC, panier moyen, marge brute, TVA), bar chart (30-day revenue), table status grid, real-time activity feed with expandable ORDER_CREATED details
+- **Kitchen** (`/kitchen`) — live order queue with STOMP updates
+- **Floor editor** (`/floor`) — drag-and-drop table layout
+- **Orders history** (`/orders`) — date-range filter, expandable order list, KPI summary
+- **Menu CMS** (`/menu`) — product and category management
+- **Sidebar** — collapsible to icon-rail (state persisted in localStorage)
 
 ## Key Patterns
 
 - **DTOs & mapping:** All API payloads use dedicated DTO classes (e.g., `CreateOrderDto`, `MenuResponseDto`). MapStruct handles entity↔DTO conversion.
 - **Angular standalone components:** Both `mobile-app` and `admin-web` use the Angular 17 standalone component API (no `NgModule`).
 - **Routing:** Both Angular apps use file-based lazy routes in `app.routes.ts`.
-- **HTTP interceptors:** API base URL is injected by `api-prefix.interceptor.ts` in both frontends.
+- **HTTP interceptors:** API base URL is injected by `api-prefix.interceptor.ts` in both frontends. Frontend paths like `/orders` become `/api/orders` automatically — never double-prefix with `/api`.
+- **Ionic page caching:** `ngOnInit` does NOT re-run when navigating back in Ionic. Use `ionViewWillEnter()` from `@ionic/angular` (implement `ViewWillEnter`) for data refresh on return navigation.
+- **Docker cache:** When code changes are not reflected after rebuild, use `docker-compose build --no-cache`. Verify the built JS bundle contains the expected code with `docker exec <container> grep ...`.
+- **OrderLine.productSnapshot:** Each order line stores a JSON snapshot of the product at order time (`{ name, price_ht, vat_rate, category }`). Use `productSnapshot.get("name")` for historical accuracy rather than joining to the live product table.

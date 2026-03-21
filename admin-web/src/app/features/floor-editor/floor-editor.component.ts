@@ -91,6 +91,13 @@ import { TablePropertiesPanelComponent }            from './table-properties-pan
                   Propre
                 </button>
               }
+              @if (cell.table.status === 'OCCUPIED') {
+                <button class="release-btn" title="Libérer la table"
+                        (click)="$event.stopPropagation(); releaseTable(cell.table)">
+                  <mat-icon style="font-size:14px">lock_open</mat-icon>
+                  Libérer
+                </button>
+              }
             </div>
           }
         }
@@ -186,6 +193,14 @@ import { TablePropertiesPanelComponent }            from './table-properties-pan
       border-radius: 6px; font-size: 10px; font-weight: 700;
       cursor: pointer; display: flex; align-items: center; gap: 2px;
       &:hover { background: #388e3c; }
+    }
+
+    .release-btn {
+      margin-top: 4px; padding: 2px 6px;
+      background: #ef5350; color: white; border: none;
+      border-radius: 6px; font-size: 10px; font-weight: 700;
+      cursor: pointer; display: flex; align-items: center; gap: 2px;
+      &:hover { background: #c62828; }
     }
   `]
 })
@@ -298,6 +313,18 @@ export class FloorEditorComponent implements OnInit, OnDestroy {
           this.snackBar.open(`Table ${table.label} marquée propre`, '', { duration: 2000 });
         },
         error: () => this.snackBar.open('Erreur lors de la mise à jour', 'Fermer', { duration: 3000 })
+      });
+  }
+
+  releaseTable(table: TableCell): void {
+    this.http.patch(`/floor-plans/tables/${table.id}/status`, null, { params: { status: 'FREE' } })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.service.updateTableProps(table.id, { status: 'FREE' });
+          this.snackBar.open(`Table ${table.label} libérée`, '', { duration: 2000 });
+        },
+        error: () => this.snackBar.open('Erreur lors de la libération', 'Fermer', { duration: 3000 })
       });
   }
 

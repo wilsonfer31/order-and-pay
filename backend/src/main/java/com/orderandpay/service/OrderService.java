@@ -39,6 +39,8 @@ public class OrderService {
             throw new IllegalArgumentException("Source invalide: " + dto.source());
         }
 
+        Instant now = Instant.now();
+
         Order order = Order.builder()
                 .restaurant(table.getRestaurant())
                 .table(table)
@@ -46,7 +48,7 @@ public class OrderService {
                 .guestCount(dto.guestCount())
                 .notes(dto.notes())
                 .status(Order.OrderStatus.CONFIRMED)
-                .confirmedAt(Instant.now())
+                .confirmedAt(now)
                 .build();
 
         for (CreateOrderDto.LineDto lineDto : dto.lines()) {
@@ -85,7 +87,7 @@ public class OrderService {
 
         // Mise à jour statut table
         if (table.getStatus() != RestaurantTable.TableStatus.OCCUPIED) {
-            table.setSessionStartedAt(Instant.now());
+            table.setSessionStartedAt(now.minusMillis(1));
         }
         table.setStatus(RestaurantTable.TableStatus.OCCUPIED);
         tableRepository.save(table);
@@ -259,6 +261,47 @@ public class OrderService {
             eventPublisher.notifyTables(restaurantId,
                     OrderEventDto.tableStatusChanged(restaurantId, table.getId(), table.getLabel(), "DIRTY"));
         }
+    }
+
+    @Transactional
+    public Order cancelOrder(UUID restaurantId, UUID orderId) {
+        Order order = orderRepository.findWithLines(orderId, restaurantId)
+                .orElseThrow(() -> new IllegalArgumentException("Commande introuvable"));
+
+        if (order.getStatus() == Order.OrderStatus.DELIVERED
+                || order.getStatus() == Order.OrderStatus.PAID
+                || order.getStatus() == Order.OrderStatus.CANCELLED) {
+            throw new IllegalStateException("Impossible d'annuler une commande en statut " + order.getStatus());
+        }
+
+        // Restaure le stock pour les produits gérés
+        for (OrderLine line : order.getLines()) {
+            if (line.getStatus() == OrderLine.LineStatus.CANCELLED) continue;
+            if (line.getProduct().isStockManaged()) {
+                line.getProduct().setStockQty(line.getProduct().getStockQty() + line.getQuantity());
+                productRepository.save(line.getProduct());
+            }
+            line.setStatus(OrderLine.LineStatus.CANCELLED);
+        }
+
+        order.setStatus(Order.OrderStatus.CANCELLED);
+        Order saved = orderRepository.save(order);
+
+        var event = OrderEventDto.orderStatusChanged(restaurantId, orderId,
+                order.getTable() != null ? order.getTable().getId() : null,
+                order.getTable() != null ? order.getTable().getLabel() : null,
+                Order.OrderStatus.CANCELLED);
+        eventPublisher.notifyKitchen(restaurantId, event);
+        eventPublisher.notifyFloor(restaurantId, event);
+        eventPublisher.notifyClient(orderId, event);
+        eventPublisher.notifyDashboard(restaurantId, event);
+
+        if (order.getTable() != null) {
+            markTableDirtyIfAllOrdersComplete(restaurantId, order.getTable());
+        }
+
+        log.info("Commande {} annulée ({})", orderId, restaurantId);
+        return saved;
     }
 
     @Transactional

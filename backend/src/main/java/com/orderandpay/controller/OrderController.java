@@ -148,6 +148,13 @@ public class OrderController {
                 .toList();
     }
 
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('KITCHEN','MANAGER','OWNER')")
+    public ResponseEntity<Void> cancel(@PathVariable UUID id) {
+        orderService.cancelOrder(TenantContext.getCurrentTenant(), id);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{id}/pay")
     @PreAuthorize("hasAnyRole('CASHIER','MANAGER','OWNER')")
     public ResponseEntity<Order> pay(@PathVariable UUID id) {

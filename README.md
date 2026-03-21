@@ -54,11 +54,12 @@
 
 ## Aperçu
 
-<img width="1865" alt="Dashboard" src="https://github.com/user-attachments/assets/de494954-a45d-425c-af39-a5d0f19b2bf5" />
+<img width="1888" height="945" alt="image" src="https://github.com/user-attachments/assets/bf82a917-2a0f-454c-bd37-193b82a39821" />
 
-<img width="1863" alt="Menu CMS" src="https://github.com/user-attachments/assets/7076d773-de89-4b59-91f1-ffb0860ac983" />
+<img width="1892" height="923" alt="image" src="https://github.com/user-attachments/assets/f1fbf9d8-7024-4187-8f51-08489f06aa34" />
 
-<img width="1885" height="896" alt="image" src="https://github.com/user-attachments/assets/fb6cf0e4-7ee4-415a-b6fd-937e0eec7e92" />
+<img width="1686" height="918" alt="image" src="https://github.com/user-attachments/assets/62fc313b-e8a4-439b-9c8f-ded39b87272e" />
+
 
 <img width="386" height="829" alt="image" src="https://github.com/user-attachments/assets/062aeb6e-e571-485b-b3fd-d2e1064b271f" />
 

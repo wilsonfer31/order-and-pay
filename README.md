@@ -60,6 +60,9 @@
 
 <img width="1885" height="896" alt="image" src="https://github.com/user-attachments/assets/fb6cf0e4-7ee4-415a-b6fd-937e0eec7e92" />
 
+<img width="386" height="829" alt="image" src="https://github.com/user-attachments/assets/062aeb6e-e571-485b-b3fd-d2e1064b271f" />
+
+<img width="413" height="847" alt="image" src="https://github.com/user-attachments/assets/3f5cb041-cd36-4e28-8d20-08661fcac243" />
 
 ---
 

@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } from '@angular/router';
 // NavigationEnd also imported below as NavEnd to avoid type narrowing issues
 import { CommonModule }      from '@angular/common';
@@ -20,7 +20,7 @@ import { AuthService }       from './core/services/auth.service';
   template: `
 @if (showShell()) {
 
-  <div class="shell">
+  <div class="shell" [class.shell--collapsed]="collapsed()">
 
     <!-- Barre latérale -->
     <nav class="sidebar">
@@ -36,35 +36,45 @@ import { AuthService }       from './core/services/auth.service';
 
       <ul class="sidebar__nav">
         <li>
-          <a routerLink="/dashboard" routerLinkActive="active" class="nav-item">
+          <a routerLink="/dashboard" routerLinkActive="active" class="nav-item" matTooltip="Dashboard" matTooltipPosition="right" [matTooltipDisabled]="!collapsed()">
             <mat-icon>dashboard</mat-icon>
-            <span>Dashboard</span>
+            <span class="nav-label">Dashboard</span>
           </a>
         </li>
         <li>
-          <a routerLink="/menu" routerLinkActive="active" class="nav-item">
+          <a routerLink="/menu" routerLinkActive="active" class="nav-item" matTooltip="Menu" matTooltipPosition="right" [matTooltipDisabled]="!collapsed()">
             <mat-icon>menu_book</mat-icon>
-            <span>Menu</span>
+            <span class="nav-label">Menu</span>
           </a>
         </li>
         <li>
-          <a routerLink="/floor/default" routerLinkActive="active" class="nav-item">
+          <a routerLink="/floor/default" routerLinkActive="active" class="nav-item" matTooltip="Plan de salle" matTooltipPosition="right" [matTooltipDisabled]="!collapsed()">
             <mat-icon>table_restaurant</mat-icon>
-            <span>Plan de salle</span>
+            <span class="nav-label">Plan de salle</span>
           </a>
         </li>
         <li>
-          <a routerLink="/kitchen" routerLinkActive="active" class="nav-item">
+          <a routerLink="/kitchen" routerLinkActive="active" class="nav-item" matTooltip="Cuisine" matTooltipPosition="right" [matTooltipDisabled]="!collapsed()">
             <mat-icon>soup_kitchen</mat-icon>
-            <span>Cuisine</span>
+            <span class="nav-label">Cuisine</span>
+          </a>
+        </li>
+        <li>
+          <a routerLink="/orders" routerLinkActive="active" class="nav-item" matTooltip="Historique" matTooltipPosition="right" [matTooltipDisabled]="!collapsed()">
+            <mat-icon>receipt_long</mat-icon>
+            <span class="nav-label">Historique</span>
           </a>
         </li>
       </ul>
 
       <div class="sidebar__footer">
-        <button class="nav-item nav-item--logout" (click)="auth.logout()">
+        <button class="nav-item nav-item--logout" (click)="auth.logout()" matTooltip="Déconnexion" matTooltipPosition="right" [matTooltipDisabled]="!collapsed()">
           <mat-icon>logout</mat-icon>
-          <span>Déconnexion</span>
+          <span class="nav-label">Déconnexion</span>
+        </button>
+        <button class="nav-item nav-item--toggle" (click)="toggleSidebar()" [matTooltip]="collapsed() ? 'Afficher le menu' : 'Réduire'" matTooltipPosition="right">
+          <mat-icon>{{ collapsed() ? 'chevron_right' : 'chevron_left' }}</mat-icon>
+          <span class="nav-label">Réduire</span>
         </button>
       </div>
     </nav>
@@ -87,6 +97,7 @@ import { AuthService }       from './core/services/auth.service';
     /* ── Variables ── */
     :host {
       --sidebar-w: 224px;
+      --sidebar-w-collapsed: 56px;
       --sidebar-bg: #ffffff;
       --sidebar-border: #e5e7eb;
       --sidebar-active-bg: #eff6ff;
@@ -95,6 +106,7 @@ import { AuthService }       from './core/services/auth.service';
       --sidebar-icon: #9ca3af;
       --brand-color: #2563eb;
       --main-bg: #f9fafb;
+      --sidebar-transition: 220ms cubic-bezier(.4,0,.2,1);
     }
 
     /* ── Layout ── */
@@ -113,6 +125,28 @@ import { AuthService }       from './core/services/auth.service';
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      transition: width var(--sidebar-transition);
+    }
+
+    /* ── Collapsed state ── */
+    .shell--collapsed .sidebar {
+      width: var(--sidebar-w-collapsed);
+    }
+    .shell--collapsed .sidebar__brand-text,
+    .shell--collapsed .nav-label {
+      opacity: 0;
+      width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      transition: opacity var(--sidebar-transition), width var(--sidebar-transition);
+    }
+    .shell--collapsed .sidebar__brand {
+      justify-content: center;
+      padding: 20px 0 16px;
+    }
+    .shell--collapsed .nav-item {
+      justify-content: center;
+      padding: 9px 0;
     }
 
     .sidebar__brand {
@@ -121,6 +155,7 @@ import { AuthService }       from './core/services/auth.service';
       gap: 10px;
       padding: 20px 16px 16px;
       border-bottom: 1px solid var(--sidebar-border);
+      transition: padding var(--sidebar-transition), justify-content var(--sidebar-transition);
     }
     .sidebar__logo {
       width: 36px;
@@ -134,7 +169,12 @@ import { AuthService }       from './core/services/auth.service';
       flex-shrink: 0;
     }
     .sidebar__logo mat-icon { font-size: 20px; width: 20px; height: 20px; }
-    .sidebar__brand-text { display: flex; flex-direction: column; min-width: 0; }
+    .sidebar__brand-text {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      transition: opacity var(--sidebar-transition), width var(--sidebar-transition);
+    }
     .sidebar__name  { font-weight: 700; font-size: 14px; color: #111827; white-space: nowrap; }
     .sidebar__role  { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; }
 
@@ -148,6 +188,7 @@ import { AuthService }       from './core/services/auth.service';
       flex-direction: column;
       gap: 2px;
     }
+    .shell--collapsed .sidebar__nav { padding: 12px 8px; }
 
     .nav-item {
       display: flex;
@@ -163,9 +204,9 @@ import { AuthService }       from './core/services/auth.service';
       border: none;
       background: transparent;
       width: 100%;
-      transition: background .12s, color .12s;
+      transition: background .12s, color .12s, padding var(--sidebar-transition), justify-content var(--sidebar-transition);
 
-      mat-icon { font-size: 18px; width: 18px; height: 18px; color: var(--sidebar-icon); transition: color .12s; }
+      mat-icon { font-size: 18px; width: 18px; height: 18px; flex-shrink: 0; color: var(--sidebar-icon); transition: color .12s; }
 
       &:hover {
         background: #f3f4f6;
@@ -179,12 +220,18 @@ import { AuthService }       from './core/services/auth.service';
         mat-icon { color: var(--sidebar-active-color); }
       }
     }
+    .nav-label { transition: opacity var(--sidebar-transition), width var(--sidebar-transition); white-space: nowrap; }
 
     .sidebar__footer {
       padding: 10px;
       border-top: 1px solid var(--sidebar-border);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
       .nav-item--logout { color: #6b7280; &:hover { background: #fef2f2; color: #dc2626; mat-icon { color: #dc2626; } } }
+      .nav-item--toggle { color: #6b7280; font-size: 13px; &:hover { background: #f3f4f6; color: #374151; mat-icon { color: #374151; } } }
     }
+    .shell--collapsed .sidebar__footer { padding: 10px 8px; }
 
     /* ── Main ── */
     .main-content {
@@ -206,4 +253,15 @@ export class AppComponent {
     ),
     { initialValue: !this.router.url.startsWith('/login') }
   );
+
+  /** État réduit de la sidebar, persisté dans localStorage */
+  readonly collapsed = signal<boolean>(localStorage.getItem('sidebar-collapsed') === 'true');
+
+  toggleSidebar(): void {
+    this.collapsed.update(v => {
+      const next = !v;
+      localStorage.setItem('sidebar-collapsed', String(next));
+      return next;
+    });
+  }
 }

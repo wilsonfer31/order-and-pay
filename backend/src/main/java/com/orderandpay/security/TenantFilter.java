@@ -29,9 +29,13 @@ public class TenantFilter extends OncePerRequestFilter {
         String header = request.getHeader("Authorization");
         if (header != null && header.startsWith("Bearer ")) {
             String token = header.substring(7);
-            UUID restaurantId = jwtService.extractRestaurantId(token);
-            if (restaurantId != null) {
-                TenantContext.setCurrentTenant(restaurantId);
+            try {
+                UUID restaurantId = jwtService.extractRestaurantId(token);
+                if (restaurantId != null) {
+                    TenantContext.setCurrentTenant(restaurantId);
+                }
+            } catch (Exception ignored) {
+                // Token invalide ou expiré — on continue sans tenant
             }
         }
         try {

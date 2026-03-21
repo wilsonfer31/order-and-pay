@@ -11,6 +11,8 @@ import { MatSnackBar }     from '@angular/material/snack-bar';
 import { Subject, switchMap, takeUntil } from 'rxjs';
 
 import { FloorEditorService, TableCell, GridCell } from './floor-editor.service';
+import { WebSocketService } from '../../core/services/websocket.service';
+import { AuthService } from '../../core/services/auth.service';
 // TableCell and GridCell used in template and markClean method
 import { TablePropertiesPanelComponent }            from './table-properties-panel.component';
 
@@ -193,6 +195,8 @@ export class FloorEditorComponent implements OnInit, OnDestroy {
   private route    = inject(ActivatedRoute);
   private http     = inject(HttpClient);
   private snackBar = inject(MatSnackBar);
+  private ws       = inject(WebSocketService);
+  private auth     = inject(AuthService);
   private destroy$ = new Subject<void>();
   private draggedTableId: string | null = null;
 
@@ -203,6 +207,20 @@ export class FloorEditorComponent implements OnInit, OnDestroy {
         switchMap(plan => this.service.loadTables(plan.id))
       ))
     ).subscribe();
+
+    this.ws.connect();
+    const restaurantId = this.auth.getRestaurantId();
+    if (restaurantId) {
+      this.ws.tablesEvents$(restaurantId)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe(event => {
+          if (event.eventType === 'TABLE_STATUS_CHANGED' && event.tableId && event.tableStatus) {
+            this.service.updateTableProps(event.tableId, {
+              status: event.tableStatus as TableCell['status']
+            });
+          }
+        });
+    }
   }
 
   addTable(): void {
@@ -232,7 +250,20 @@ export class FloorEditorComponent implements OnInit, OnDestroy {
   }
 
   onDeleteTable(id: string): void {
-    this.service.deleteTable(id);
+    if (id.startsWith('new-')) {
+      // Table jamais sauvegardée — suppression locale uniquement
+      this.service.deleteTable(id);
+      return;
+    }
+    this.http.delete(`/floor-plans/tables/${id}`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.service.deleteTable(id);
+          this.snackBar.open('Table supprimée', '', { duration: 2000 });
+        },
+        error: () => this.snackBar.open('Erreur lors de la suppression', 'Fermer', { duration: 3000 })
+      });
   }
 
   // ── Drag & Drop HTML5 ─────────────────────────────────────────────────────
@@ -276,6 +307,7 @@ export class FloorEditorComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.ws.disconnect();
     this.destroy$.next();
     this.destroy$.complete();
   }

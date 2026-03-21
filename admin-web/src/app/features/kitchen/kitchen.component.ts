@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, signal, inject, computed } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, signal, inject, computed, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { MatIconModule } from '@angular/material/icon';
@@ -27,6 +27,18 @@ interface KitchenOrder {
   lines: KitchenLine[];
 }
 
+interface KitchenTicket {
+  orderId: string;
+  orderNumber: number | null;
+  tableLabel: string;
+  confirmedAt: string | null;
+  lineId: string;
+  productName: string;
+  quantity: number;
+  lineStatus: 'PENDING' | 'COOKING' | 'READY' | 'SERVED';
+  notes?: string;
+}
+
 @Component({
   selector: 'app-kitchen',
   standalone: true,
@@ -41,6 +53,7 @@ interface KitchenOrder {
       <h1>Vue cuisine</h1>
     </div>
     <div class="kitchen-header__right">
+      <span class="kitchen-clock">{{ currentTime() }}</span>
       <span class="ws-dot" [class.ws-dot--on]="wsConnected()"></span>
       <span class="ws-label">{{ wsConnected() ? 'Temps réel' : 'Déconnecté' }}</span>
     </div>
@@ -48,102 +61,112 @@ interface KitchenOrder {
 
   <div class="kanban">
 
-    <!-- Colonne Nouvelles -->
+    <!-- Colonne À préparer -->
     <div class="col">
       <div class="col__header col__header--new">
         <mat-icon>fiber_new</mat-icon>
-        Nouvelles
-        <span class="col__count">{{ confirmed().length }}</span>
+        À préparer
+        <span class="col__count">{{ pendingTickets().length }}</span>
       </div>
-      @for (order of confirmed(); track order.orderId) {
-        <div class="card card--new">
+      @for (ticket of pendingTickets(); track ticket.lineId) {
+        <div class="card card--new"
+             [class.card--warn]="urgencyClass(ticket.confirmedAt) === 'warn'"
+             [class.card--danger]="urgencyClass(ticket.confirmedAt) === 'danger'">
           <div class="card__top">
-            <span class="card__table">{{ order.tableLabel }}</span>
-            @if (order.orderNumber) {
-              <span class="card__num">#{{ order.orderNumber }}</span>
+            <span class="card__table">{{ ticket.tableLabel }}</span>
+            @if (ticket.orderNumber) {
+              <span class="card__num">#{{ ticket.orderNumber }}</span>
             }
           </div>
-          <ul class="card__lines">
-            @for (line of order.lines; track line.id) {
-              <li><b>{{ line.quantity }}×</b> {{ line.productName }}
-                @if (line.notes) { <span class="line-note">{{ line.notes }}</span> }
-              </li>
-            }
-          </ul>
-          <button class="action-btn action-btn--primary" (click)="takeOrder(order)">
-            <mat-icon>check</mat-icon> Prendre en charge
+          <div class="card__time" [class]="'card__time--' + urgencyClass(ticket.confirmedAt)">
+            <mat-icon style="font-size:13px;width:13px;height:13px">schedule</mat-icon>
+            {{ formatTime(ticket.confirmedAt) }}
+            <span class="card__elapsed">· {{ elapsed(ticket.confirmedAt) }}</span>
+          </div>
+          <div class="ticket__item">
+            <span class="ticket__qty">{{ ticket.quantity }}×</span>
+            <span class="ticket__name">{{ ticket.productName }}</span>
+          </div>
+          @if (ticket.notes) { <div class="ticket__notes">{{ ticket.notes }}</div> }
+          <button class="action-btn action-btn--primary" (click)="launchTicket(ticket)">
+            <mat-icon>play_arrow</mat-icon> Prendre en charge
           </button>
         </div>
       }
-      @if (confirmed().length === 0) {
-        <div class="col__empty">Aucune nouvelle commande</div>
+      @if (pendingTickets().length === 0) {
+        <div class="col__empty">Aucun plat en attente</div>
       }
     </div>
 
-    <!-- Colonne En cours -->
+    <!-- Colonne En préparation -->
     <div class="col">
       <div class="col__header col__header--progress">
         <mat-icon>soup_kitchen</mat-icon>
         En préparation
-        <span class="col__count">{{ inProgress().length }}</span>
+        <span class="col__count">{{ cookingTickets().length }}</span>
       </div>
-      @for (order of inProgress(); track order.orderId) {
-        <div class="card card--progress">
+      @for (ticket of cookingTickets(); track ticket.lineId) {
+        <div class="card card--progress"
+             [class.card--warn]="urgencyClass(ticket.confirmedAt) === 'warn'"
+             [class.card--danger]="urgencyClass(ticket.confirmedAt) === 'danger'">
           <div class="card__top">
-            <span class="card__table">{{ order.tableLabel }}</span>
-            @if (order.orderNumber) {
-              <span class="card__num">#{{ order.orderNumber }}</span>
+            <span class="card__table">{{ ticket.tableLabel }}</span>
+            @if (ticket.orderNumber) {
+              <span class="card__num">#{{ ticket.orderNumber }}</span>
             }
           </div>
-          <ul class="card__lines card__lines--interactive">
-            @for (line of order.lines; track line.id) {
-              <li class="line-row">
-                <span class="line-text"><b>{{ line.quantity }}×</b> {{ line.productName }}</span>
-                <span class="line-status-badge" [class]="'line-badge--' + line.status.toLowerCase()">
-                  {{ lineLabel(line.status) }}
-                </span>
-                @if (line.status === 'PENDING') {
-                  <button class="line-btn" (click)="setLineStatus(order, line, 'COOKING')">▶ Lancer</button>
-                } @else if (line.status === 'COOKING') {
-                  <button class="line-btn line-btn--ready" (click)="setLineStatus(order, line, 'READY')">✓ Prêt</button>
-                }
-              </li>
-            }
-          </ul>
-        </div>
-      }
-      @if (inProgress().length === 0) {
-        <div class="col__empty">Aucune commande en préparation</div>
-      }
-    </div>
-
-    <!-- Colonne Prêtes -->
-    <div class="col">
-      <div class="col__header col__header--ready">
-        <mat-icon>done_all</mat-icon>
-        Prêtes à servir
-        <span class="col__count">{{ ready().length }}</span>
-      </div>
-      @for (order of ready(); track order.orderId) {
-        <div class="card card--ready">
-          <div class="card__top">
-            <span class="card__table">{{ order.tableLabel }}</span>
-            @if (order.orderNumber) {
-              <span class="card__num">#{{ order.orderNumber }}</span>
-            }
+          <div class="card__time" [class]="'card__time--' + urgencyClass(ticket.confirmedAt)">
+            <mat-icon style="font-size:13px;width:13px;height:13px">schedule</mat-icon>
+            {{ formatTime(ticket.confirmedAt) }}
+            <span class="card__elapsed">· {{ elapsed(ticket.confirmedAt) }}</span>
           </div>
-          <ul class="card__lines">
-            @for (line of order.lines; track line.id) {
-              <li><b>{{ line.quantity }}×</b> {{ line.productName }}</li>
-            }
-          </ul>
-          <button class="action-btn action-btn--success" (click)="deliverOrder(order)">
-            <mat-icon>delivery_dining</mat-icon> Marquer servie
+          <div class="ticket__item">
+            <span class="ticket__qty">{{ ticket.quantity }}×</span>
+            <span class="ticket__name">{{ ticket.productName }}</span>
+          </div>
+          @if (ticket.notes) { <div class="ticket__notes">{{ ticket.notes }}</div> }
+          <button class="action-btn action-btn--warn" (click)="readyTicket(ticket)">
+            <mat-icon>check</mat-icon> Prêt
           </button>
         </div>
       }
-      @if (ready().length === 0) {
-        <div class="col__empty">Aucune commande prête</div>
+      @if (cookingTickets().length === 0) {
+        <div class="col__empty">Aucun plat en préparation</div>
+      }
+    </div>
+
+    <!-- Colonne Prêts à servir -->
+    <div class="col">
+      <div class="col__header col__header--ready">
+        <mat-icon>done_all</mat-icon>
+        Prêts à servir
+        <span class="col__count">{{ readyTickets().length }}</span>
+      </div>
+      @for (ticket of readyTickets(); track ticket.lineId) {
+        <div class="card card--ready">
+          <div class="card__top">
+            <span class="card__table">{{ ticket.tableLabel }}</span>
+            @if (ticket.orderNumber) {
+              <span class="card__num">#{{ ticket.orderNumber }}</span>
+            }
+          </div>
+          <div class="card__time card__time--ok">
+            <mat-icon style="font-size:13px;width:13px;height:13px">schedule</mat-icon>
+            {{ formatTime(ticket.confirmedAt) }}
+            <span class="card__elapsed">· {{ elapsed(ticket.confirmedAt) }}</span>
+          </div>
+          <div class="ticket__item">
+            <span class="ticket__qty">{{ ticket.quantity }}×</span>
+            <span class="ticket__name">{{ ticket.productName }}</span>
+          </div>
+          @if (ticket.notes) { <div class="ticket__notes">{{ ticket.notes }}</div> }
+          <button class="action-btn action-btn--success" (click)="serveTicket(ticket)">
+            <mat-icon>delivery_dining</mat-icon> Servi
+          </button>
+        </div>
+      }
+      @if (readyTickets().length === 0) {
+        <div class="col__empty">Aucun plat prêt</div>
       }
     </div>
 
@@ -164,7 +187,12 @@ interface KitchenOrder {
     .kitchen-header__left { display: flex; align-items: center; gap: 10px; }
     .kitchen-header__left h1 { margin: 0; font-size: 20px; font-weight: 700; }
     .kitchen-header__left mat-icon { font-size: 24px; color: #f59e0b; }
-    .kitchen-header__right { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #94a3b8; }
+    .kitchen-header__right { display: flex; align-items: center; gap: 12px; font-size: 13px; color: #94a3b8; }
+    .kitchen-clock {
+      font-size: 22px; font-weight: 800; color: #f8fafc;
+      font-variant-numeric: tabular-nums; letter-spacing: .02em;
+      padding-right: 12px; border-right: 1px solid #334155;
+    }
     .ws-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; }
     .ws-dot--on { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
 
@@ -197,10 +225,25 @@ interface KitchenOrder {
     .card--new      { border-color: #1d4ed8; }
     .card--progress { border-color: #b45309; }
     .card--ready    { border-color: #15803d; box-shadow: 0 0 12px rgba(34,197,94,.2); }
+    .card--warn     { border-color: #d97706 !important; box-shadow: 0 0 10px rgba(217,119,6,.3); }
+    .card--danger   { border-color: #dc2626 !important; box-shadow: 0 0 14px rgba(220,38,38,.5); animation: pulse-border 1.5s infinite; }
+    @keyframes pulse-border { 0%, 100% { box-shadow: 0 0 14px rgba(220,38,38,.5); } 50% { box-shadow: 0 0 24px rgba(220,38,38,.9); } }
 
-    .card__top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .card__top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
     .card__table { font-size: 18px; font-weight: 800; color: #f8fafc; }
     .card__num   { font-size: 12px; color: #64748b; background: #0f172a; padding: 2px 8px; border-radius: 8px; }
+
+    .card__time {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 12px; font-weight: 700;
+      padding: 3px 8px; border-radius: 6px; margin-bottom: 10px;
+      width: fit-content;
+    }
+    .card__time--ok     { background: #14532d; color: #86efac; }
+    .card__time--warn   { background: #451a03; color: #fcd34d; }
+    .card__time--danger { background: #7f1d1d; color: #fca5a5; animation: pulse 1.5s infinite; }
+    .card__elapsed { font-weight: 400; opacity: .8; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .6; } }
 
     .card__lines { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
     .card__lines li { font-size: 14px; color: #cbd5e1; }
@@ -233,8 +276,15 @@ interface KitchenOrder {
       font-size: 13px; font-weight: 700;
     }
     .action-btn mat-icon { font-size: 18px; width: 18px; height: 18px; }
+    .ticket__item { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+    .ticket__qty  { font-size: 22px; font-weight: 900; color: #f59e0b; flex-shrink: 0; }
+    .ticket__name { font-size: 16px; font-weight: 700; color: #f8fafc; }
+    .ticket__notes { font-size: 12px; color: #94a3b8; font-style: italic; margin-bottom: 8px; }
+
     .action-btn--primary { background: #1d4ed8; color: white; }
     .action-btn--primary:hover { background: #1e40af; }
+    .action-btn--warn    { background: #b45309; color: white; }
+    .action-btn--warn:hover { background: #92400e; }
     .action-btn--success { background: #15803d; color: white; }
     .action-btn--success:hover { background: #166534; }
   `]
@@ -243,14 +293,67 @@ export class KitchenComponent implements OnInit, OnDestroy {
   private http    = inject(HttpClient);
   private ws      = inject(WebSocketService);
   private auth    = inject(AuthService);
+  private ngZone  = inject(NgZone);
   private destroy$ = new Subject<void>();
 
   orders      = signal<KitchenOrder[]>([]);
   wsConnected = signal(false);
+  now         = signal(Date.now());
+  private clockInterval?: ReturnType<typeof setInterval>;
 
-  confirmed  = computed(() => this.orders().filter(o => o.status === 'CONFIRMED'));
-  inProgress = computed(() => this.orders().filter(o => o.status === 'IN_PROGRESS'));
-  ready      = computed(() => this.orders().filter(o => o.status === 'READY'));
+  private toTickets(orders: KitchenOrder[]): KitchenTicket[] {
+    return orders.flatMap(o =>
+      o.lines
+        .filter(l => l.status !== 'SERVED')
+        .map(l => ({
+          orderId:     o.orderId,
+          orderNumber: o.orderNumber,
+          tableLabel:  o.tableLabel,
+          confirmedAt: o.confirmedAt,
+          lineId:      l.id,
+          productName: l.productName,
+          quantity:    l.quantity,
+          lineStatus:  l.status,
+          notes:       l.notes,
+        }))
+    );
+  }
+
+  currentTime = computed(() =>
+    new Date(this.now()).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  );
+
+  formatTime(iso: string | null): string {
+    if (!iso) return '--:--';
+    return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  elapsed(iso: string | null): string {
+    if (!iso) return '';
+    const mins = Math.floor((this.now() - new Date(iso).getTime()) / 60_000);
+    if (mins < 1)  return 'à l\'instant';
+    if (mins < 60) return `${mins} min`;
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return m > 0 ? `${h}h${m.toString().padStart(2,'0')}` : `${h}h`;
+  }
+
+  urgencyClass(iso: string | null): string {
+    if (!iso) return 'ok';
+    const mins = Math.floor((this.now() - new Date(iso).getTime()) / 60_000);
+    if (mins >= 15) return 'danger';
+    if (mins >= 7)  return 'warn';
+    return 'ok';
+  }
+
+  pendingTickets = computed(() =>
+    this.toTickets(this.orders()).filter(t => t.lineStatus === 'PENDING')
+  );
+  cookingTickets = computed(() =>
+    this.toTickets(this.orders()).filter(t => t.lineStatus === 'COOKING')
+  );
+  readyTickets = computed(() =>
+    this.toTickets(this.orders()).filter(t => t.lineStatus === 'READY')
+  );
 
   ngOnInit(): void {
     this.loadOrders();
@@ -263,6 +366,13 @@ export class KitchenComponent implements OnInit, OnDestroy {
         .pipe(takeUntil(this.destroy$))
         .subscribe(event => this.applyEvent(event));
     }
+
+    // Rafraîchit l'horloge et le temps écoulé toutes les secondes
+    this.ngZone.runOutsideAngular(() => {
+      this.clockInterval = setInterval(() => {
+        this.ngZone.run(() => this.now.set(Date.now()));
+      }, 1_000);
+    });
   }
 
   private loadOrders(): void {
@@ -282,65 +392,61 @@ export class KitchenComponent implements OnInit, OnDestroy {
       );
     } else if (event.eventType === 'LINE_STATUS_CHANGED') {
       this.orders.update(list =>
-        list.map(o => ({
-          ...o,
-          lines: o.lines.map(l =>
+        list.map(o => {
+          if (o.orderId !== event.orderId) return o;
+          const updatedLines = o.lines.map(l =>
             l.id === event.lineId ? { ...l, status: event.lineStatus } : l
-          )
-        }))
+          );
+          const allDone = updatedLines
+            .filter(l => l.status !== 'SERVED')
+            .every(l => l.status === 'READY' || l.status === 'SERVED');
+          return {
+            ...o,
+            lines: updatedLines,
+            status: allDone ? 'READY' : (
+              event.lineStatus === 'COOKING' && o.status === 'CONFIRMED' ? 'IN_PROGRESS' : o.status
+            )
+          };
+        })
       );
-      // If all lines READY, order auto-becomes READY on backend — reload to sync
-      this.loadOrders();
     }
   }
 
-  takeOrder(order: KitchenOrder): void {
-    this.http.patch(`/orders/${order.orderId}/status`, null, { params: { status: 'IN_PROGRESS' } })
-      .subscribe({
-        next: () => this.orders.update(list =>
-          list.map(o => o.orderId === order.orderId ? { ...o, status: 'IN_PROGRESS' } : o)
-        ),
-        error: () => {}
-      });
-  }
-
-  setLineStatus(order: KitchenOrder, line: KitchenLine, status: string): void {
-    this.http.patch(`/orders/${order.orderId}/lines/${line.id}/status`, null, { params: { status } })
+  private patchLineStatus(ticket: KitchenTicket, status: string): void {
+    this.http.patch(`/orders/${ticket.orderId}/lines/${ticket.lineId}/status`, null, { params: { status } })
       .subscribe({
         next: () => {
           this.orders.update(list =>
-            list.map(o => o.orderId === order.orderId ? {
-              ...o,
-              lines: o.lines.map(l => l.id === line.id ? { ...l, status: status as any } : l)
-            } : o)
+            list.map(o => {
+              if (o.orderId !== ticket.orderId) return o;
+              const updatedLines = o.lines.map(l =>
+                l.id === ticket.lineId ? { ...l, status: status as any } : l
+              );
+              const allDone = updatedLines
+                .filter(l => l.status !== 'SERVED')
+                .every(l => l.status === 'READY' || l.status === 'SERVED');
+              return {
+                ...o,
+                lines: updatedLines,
+                status: allDone ? 'READY' : (
+                  status === 'COOKING' && o.status === 'CONFIRMED' ? 'IN_PROGRESS' : o.status
+                )
+              };
+            })
           );
-          // Check if all lines ready → auto READY
-          const updated = this.orders().find(o => o.orderId === order.orderId);
-          if (updated && updated.lines.every(l => l.status === 'READY' || l.status === 'SERVED')) {
-            this.orders.update(list =>
-              list.map(o => o.orderId === order.orderId ? { ...o, status: 'READY' } : o)
-            );
-          }
         },
         error: () => {}
       });
   }
 
-  deliverOrder(order: KitchenOrder): void {
-    this.http.patch(`/orders/${order.orderId}/status`, null, { params: { status: 'DELIVERED' } })
-      .subscribe({
-        next: () => this.orders.update(list => list.filter(o => o.orderId !== order.orderId)),
-        error: () => {}
-      });
-  }
-
-  lineLabel(s: string): string {
-    return { PENDING: 'En attente', COOKING: 'En cuisine', READY: 'Prêt', SERVED: 'Servi' }[s] ?? s;
-  }
+  launchTicket(ticket: KitchenTicket): void  { this.patchLineStatus(ticket, 'COOKING'); }
+  readyTicket(ticket: KitchenTicket): void   { this.patchLineStatus(ticket, 'READY'); }
+  serveTicket(ticket: KitchenTicket): void   { this.patchLineStatus(ticket, 'SERVED'); }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
     this.ws.disconnect();
+    if (this.clockInterval) clearInterval(this.clockInterval);
   }
 }

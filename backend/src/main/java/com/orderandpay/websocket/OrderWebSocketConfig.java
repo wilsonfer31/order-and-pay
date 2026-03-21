@@ -1,6 +1,5 @@
 package com.orderandpay.websocket;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
@@ -13,11 +12,6 @@ import java.util.List;
 @Configuration
 @EnableWebSocketMessageBroker
 public class OrderWebSocketConfig implements WebSocketMessageBrokerConfigurer {
-
-    @Value("${app.cors.allowed-origins[0]:http://localhost:4200}")
-    private String allowedOrigin0;
-    @Value("${app.cors.allowed-origins[1]:http://localhost:8100}")
-    private String allowedOrigin1;
 
     private final WsAuthInterceptor wsAuthInterceptor;
 
@@ -32,7 +26,8 @@ public class OrderWebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 "/topic/kitchen",   // → écrans cuisine
                 "/topic/floor",     // → tablettes salle
                 "/topic/client",    // → app mobile client
-                "/topic/dashboard"  // → dashboard admin
+                "/topic/dashboard", // → dashboard admin
+                "/topic/tables"     // → statuts tables temps réel (public)
         );
         registry.setApplicationDestinationPrefixes("/app");
         registry.setUserDestinationPrefix("/user");
@@ -41,9 +36,7 @@ public class OrderWebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns(allowedOrigin0, allowedOrigin1, "${FRONTEND_URL:https://app.orderandpay.io}")
-                .withSockJS()
-                .setHeartbeatTime(25_000);
+                .setAllowedOriginPatterns("*");
     }
 
     @Override

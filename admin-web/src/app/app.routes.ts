@@ -27,5 +27,10 @@ export const routes: Routes = [
     loadComponent: () => import('./features/kitchen/kitchen.component').then(m => m.KitchenComponent),
     canActivate: [authGuard]
   },
+  {
+    path: 'orders',
+    loadComponent: () => import('./features/orders/orders-history.component').then(m => m.OrdersHistoryComponent),
+    canActivate: [authGuard]
+  },
   { path: '**', redirectTo: 'dashboard' }
 ];

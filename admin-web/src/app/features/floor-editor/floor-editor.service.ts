@@ -1,6 +1,6 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, map, tap } from 'rxjs';
+import { Observable, map, tap, switchMap } from 'rxjs';
 
 export interface FloorPlan {
   id: string;
@@ -224,14 +224,21 @@ export class FloorEditorService {
 
   save(floorPlanId: string): Observable<void> {
     const positions = this.tables().map(t => ({
-      tableId: t.id,
+      tableId:  t.id.startsWith('new-') ? null : t.id,
       x: t.gridX, y: t.gridY,
-      w: t.gridW, h: t.gridH
+      w: t.gridW, h: t.gridH,
+      label:    t.label,
+      capacity: t.capacity,
+      shape:    t.shape,
     }));
 
     return this.http
       .put<void>(`/floor-plans/${floorPlanId}/tables/positions`, positions)
-      .pipe(tap(() => this.isDirty.set(false)));
+      .pipe(
+        switchMap(() => this.loadTables(floorPlanId)),
+        tap(() => this.isDirty.set(false)),
+        map(() => void 0)
+      );
   }
 
   // ── Utilitaires ────────────────────────────────────────────────────────────

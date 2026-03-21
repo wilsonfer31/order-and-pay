@@ -32,8 +32,9 @@ public class WsAuthInterceptor implements ChannelInterceptor {
 
         String authHeader = accessor.getFirstNativeHeader("Authorization");
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            log.warn("WS CONNECT sans token JWT — connexion refusée");
-            throw new org.springframework.security.access.AccessDeniedException("Token manquant");
+            // Connexions anonymes autorisées (app mobile publique)
+            log.debug("WS CONNECT sans token JWT — connexion anonyme acceptée");
+            return message;
         }
 
         String token    = authHeader.substring(7);

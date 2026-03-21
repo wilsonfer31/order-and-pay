@@ -69,4 +69,20 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
             ORDER BY o.createdAt DESC
            """)
     List<Order> findActiveOrdersByTableId(@Param("tableId") UUID tableId);
+
+    @Query("""
+            SELECT DISTINCT o FROM Order o
+            LEFT JOIN FETCH o.lines l
+            LEFT JOIN FETCH l.product p
+            LEFT JOIN FETCH o.table t
+            WHERE o.restaurant.id = :restaurantId
+              AND o.status IN ('DELIVERED', 'PAID')
+              AND o.confirmedAt >= :from
+              AND o.confirmedAt <  :to
+            ORDER BY o.confirmedAt DESC
+           """)
+    List<Order> findHistory(
+            @Param("restaurantId") UUID restaurantId,
+            @Param("from") Instant from,
+            @Param("to")   Instant to);
 }

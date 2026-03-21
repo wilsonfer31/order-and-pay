@@ -10,13 +10,74 @@
 @import "@ionic/angular/css/flex-utils.css";
 
 :root {
-  --ion-color-primary: #3f51b5;
-  --ion-color-primary-rgb: 63,81,181;
-  --ion-color-primary-contrast: #ffffff;
+  /* ── Primary : Orange chaud ── */
+  --ion-color-primary:               #F97316;
+  --ion-color-primary-rgb:           249,115,22;
+  --ion-color-primary-contrast:      #ffffff;
+  --ion-color-primary-contrast-rgb:  255,255,255;
+  --ion-color-primary-shade:         #EA580C;
+  --ion-color-primary-tint:          #FB923C;
+
+  /* ── Success : Émeraude ── */
+  --ion-color-success:               #10B981;
+  --ion-color-success-rgb:           16,185,129;
+  --ion-color-success-contrast:      #ffffff;
+  --ion-color-success-shade:         #059669;
+  --ion-color-success-tint:          #34D399;
+
+  /* ── Warning : Ambre ── */
+  --ion-color-warning:               #F59E0B;
+  --ion-color-warning-rgb:           245,158,11;
+  --ion-color-warning-contrast:      #ffffff;
+  --ion-color-warning-shade:         #D97706;
+  --ion-color-warning-tint:          #FCD34D;
+
+  /* ── Danger : Rouge ── */
+  --ion-color-danger:                #EF4444;
+  --ion-color-danger-rgb:            239,68,68;
+  --ion-color-danger-contrast:       #ffffff;
+  --ion-color-danger-shade:          #DC2626;
+  --ion-color-danger-tint:           #F87171;
+
+  /* ── Medium : Ardoise ── */
+  --ion-color-medium:                #9CA3AF;
+  --ion-color-medium-rgb:            156,163,175;
+  --ion-color-medium-contrast:       #ffffff;
+  --ion-color-medium-shade:          #6B7280;
+  --ion-color-medium-tint:           #D1D5DB;
+
+  /* ── Fond & texte ── */
+  --ion-background-color:            #FFFBF7;
+  --ion-background-color-rgb:        255,251,247;
+  --ion-text-color:                  #1C1917;
+  --ion-text-color-rgb:              28,25,23;
+
+  /* ── Typographie ── */
   --ion-font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+
+  /* ── Tokens design custom ── */
+  --c-surface:         #FFFFFF;
+  --c-surface-warm:    #FFF7ED;
+  --c-border:          #E7E5E4;
+  --c-border-warm:     #FED7AA;
+  --c-text-muted:      #78716C;
+  --c-text-secondary:  #57534E;
+  --shadow-sm:         0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:         0 4px 12px rgba(0,0,0,.08);
+  --shadow-orange:     0 4px 14px rgba(249,115,22,.28);
+  --r-sm:              8px;
+  --r-md:              12px;
+  --r-lg:              16px;
 }
 
-/* Forcer la hauteur plein écran pour Ionic PWA dans un navigateur desktop/mobile */
+/* ── Toolbar primary : dégradé orange ── */
+ion-toolbar[color="primary"] {
+  --background: linear-gradient(135deg, #F97316 0%, #EA580C 100%);
+  --color: #ffffff;
+  box-shadow: 0 2px 10px rgba(249,115,22,.30);
+}
+
+/* ── Hauteur plein écran pour Ionic PWA ── */
 html, body {
   height: 100% !important;
   width: 100% !important;
@@ -30,7 +91,6 @@ ion-app {
   width: 100vw !important;
 }
 
-/* Rendre ion-content scrollable sur desktop également */
 ion-content::part(scroll) {
   overflow-y: auto !important;
 }

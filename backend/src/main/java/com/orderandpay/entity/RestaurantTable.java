@@ -53,6 +53,10 @@ public class RestaurantTable {
     @Column(name = "qr_token", unique = true, length = 100)
     private String qrToken;
 
+    /** Début de la session en cours (mis à jour quand la table passe en OCCUPIED). */
+    @Column(name = "session_started_at")
+    private Instant sessionStartedAt;
+
     @Column(name = "created_at", updatable = false)
     @Builder.Default
     private Instant createdAt = Instant.now();

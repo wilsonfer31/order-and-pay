@@ -113,33 +113,40 @@ import { CartService }       from '../../services/cart.service';
   styles: [`
     .empty-cart {
       display: flex; flex-direction: column; align-items: center;
-      justify-content: center; height: 60vh; gap: 16px; color: #888;
+      justify-content: center; height: 60vh; gap: 16px; color: #9CA3AF;
     }
-    .cart-card { margin: 16px; }
+    .cart-card { margin: 16px; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,.07); }
     .cart-item { --padding-start: 0; }
     .qty-controls { display: flex; align-items: center; gap: 4px; }
-    .qty { font-weight: 700; font-size: 16px; min-width: 20px; text-align: center; }
-    .line-total { font-weight: 600; font-size: 13px; min-width: 60px; text-align: right; color: var(--ion-color-primary); }
+    .qty {
+      font-weight: 700; font-size: 15px; min-width: 24px; text-align: center;
+      background: #FFF7ED; color: #F97316; border-radius: 20px;
+      padding: 1px 6px;
+    }
+    .line-total { font-weight: 700; font-size: 13px; min-width: 60px; text-align: right; color: #F97316; }
     .total-row {
-      display: flex; justify-content: space-between;
-      border-top: 1px solid #eee; padding-top: 12px; margin-top: 8px;
-      font-size: 18px;
+      display: flex; justify-content: space-between; align-items: center;
+      border-top: 1px solid #F5F5F4; padding-top: 14px; margin-top: 8px;
+      font-size: 17px;
+      strong { color: #F97316; font-size: 20px; }
     }
     .error-msg {
-      color: var(--ion-color-danger); text-align: center;
+      color: #EF4444; text-align: center;
       padding: 12px 16px; font-size: 14px;
+      background: #FEF2F2; border-radius: 10px; margin: 0 16px;
     }
     .footer-btns {
       display: flex; gap: 8px; padding: 8px 16px;
       ion-button { flex: 1; }
     }
     .order-btn {
-      flex: 1; padding: 12px 16px; border-radius: 8px;
-      background: #2dd36f; color: white;
-      border: none; font-size: 15px; font-weight: 700;
+      flex: 1; padding: 14px 16px; border-radius: 14px;
+      background: linear-gradient(135deg, #F97316, #EA580C); color: white;
+      border: none; font-size: 16px; font-weight: 700;
       display: flex; align-items: center; justify-content: center;
-      gap: 4px; cursor: pointer;
-      &:disabled { opacity: .6; cursor: not-allowed; }
+      gap: 6px; cursor: pointer;
+      box-shadow: 0 4px 14px rgba(249,115,22,.35);
+      &:disabled { opacity: .6; cursor: not-allowed; box-shadow: none; }
     }
   `]
 })

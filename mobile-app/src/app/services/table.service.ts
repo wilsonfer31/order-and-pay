@@ -8,6 +8,7 @@ export interface TableInfo {
   qrToken?: string;
   status: string;
   capacity?: number;
+  restaurantId?: string;
 }
 
 @Injectable({ providedIn: 'root' })

@@ -12,7 +12,7 @@ import {
 } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
 import {
-  checkmarkCircle, time, restaurant, bicycle,
+  checkmarkCircle, time, timeOutline, restaurant, bicycle,
   refreshOutline, cartOutline, closeCircle
 } from 'ionicons/icons';
 import { RxStomp } from '@stomp/rx-stomp';
@@ -30,6 +30,7 @@ interface TableOrder {
   orderId: string;
   status: 'CONFIRMED' | 'IN_PROGRESS' | 'READY' | 'DELIVERED';
   totalTtc: number;
+  confirmedAt?: string | null;
   lines: TableOrderLine[];
 }
 
@@ -86,6 +87,12 @@ interface TableOrder {
               <ion-label>{{ orderLabel(order.status) }}</ion-label>
             </ion-chip>
           </div>
+          @if (order.confirmedAt) {
+            <div class="order-time">
+              <ion-icon name="time-outline" style="font-size:13px;flex-shrink:0"></ion-icon>
+              Prise à <strong>{{ formatTime(order.confirmedAt) }}</strong>
+            </div>
+          }
         </ion-card-header>
         <ion-card-content>
           <div class="lines-list">
@@ -114,52 +121,62 @@ interface TableOrder {
     .center-spinner { display: flex; justify-content: center; padding: 60px; }
     .empty-state {
       display: flex; flex-direction: column; align-items: center;
-      justify-content: center; height: 50vh; gap: 16px; color: #aaa;
+      justify-content: center; height: 50vh; gap: 16px; color: #D1D5DB;
       ion-icon { font-size: 64px; }
-      p { font-size: 15px; }
+      p { font-size: 15px; color: #9CA3AF; }
     }
     .summary-bar {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 12px 16px; background: #f0f4ff;
-      border-bottom: 1px solid #dde4f5;
-      font-size: 14px; color: #555;
+      padding: 12px 16px;
+      background: linear-gradient(135deg, #FFF7ED, #FFFBF7);
+      border-bottom: 1px solid #FED7AA;
+      font-size: 14px; color: #78716C;
     }
-    .summary-count { font-weight: 600; }
-    .summary-total strong { color: var(--ion-color-primary); }
+    .summary-count { font-weight: 700; color: #57534E; }
+    .summary-total strong { color: #F97316; }
 
-    .order-card { margin: 12px 16px; }
+    .order-card {
+      margin: 12px 16px;
+      border-radius: 16px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.07);
+    }
     .order-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    .order-title { font-size: 15px; font-weight: 700; }
+    .order-title { font-size: 15px; font-weight: 700; color: #1C1917; }
     .order-status-chip { font-size: 12px; }
+    .order-time {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 12px; color: #78716C; margin-top: 6px;
+      strong { color: #1C1917; }
+    }
 
-    .lines-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+    .lines-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
     .line-row {
       display: flex; align-items: center; gap: 10px;
-      padding: 6px 0; border-bottom: 1px solid #f0f0f0;
+      padding: 7px 0; border-bottom: 1px solid #F5F5F4;
       &:last-child { border-bottom: none; }
     }
     .line-icon { font-size: 18px; flex-shrink: 0; }
-    .line-icon--medium  { color: #92949c; }
-    .line-icon--warning { color: #ffc409; }
-    .line-icon--success { color: #2dd36f; }
-    .line-icon--primary { color: #3880ff; }
-    .line-icon--danger  { color: #eb445a; }
+    .line-icon--medium  { color: #9CA3AF; }
+    .line-icon--warning { color: #F59E0B; }
+    .line-icon--success { color: #10B981; }
+    .line-icon--primary { color: #F97316; }
+    .line-icon--danger  { color: #EF4444; }
 
-    .line-name { flex: 1; font-size: 14px; }
+    .line-name { flex: 1; font-size: 14px; color: #1C1917; }
     .line-badge {
-      font-size: 11px; font-weight: 600; padding: 3px 8px;
-      border-radius: 12px; text-transform: uppercase; letter-spacing: .03em;
+      font-size: 11px; font-weight: 700; padding: 3px 10px;
+      border-radius: 20px; text-transform: uppercase; letter-spacing: .04em;
     }
-    .line-badge--medium  { background: #e8e8e8; color: #666; }
-    .line-badge--warning { background: #fff3cd; color: #856404; }
-    .line-badge--success { background: #d1f5e0; color: #1a7a40; }
-    .line-badge--primary { background: #dce8ff; color: #1a4db5; }
-    .line-badge--danger  { background: #fde8eb; color: #a80019; }
+    .line-badge--medium  { background: #F3F4F6; color: #6B7280; }
+    .line-badge--warning { background: #FEF3C7; color: #B45309; }
+    .line-badge--success { background: #D1FAE5; color: #065F46; }
+    .line-badge--primary { background: #FFF7ED; color: #C2410C; }
+    .line-badge--danger  { background: #FEE2E2; color: #991B1B; }
 
     .order-total {
-      text-align: right; font-size: 14px; color: #555;
-      padding-top: 8px; border-top: 1px solid #eee;
-      strong { color: var(--ion-color-primary); }
+      text-align: right; font-size: 14px; color: #78716C;
+      padding-top: 10px; border-top: 1px solid #F5F5F4;
+      strong { color: #F97316; font-size: 16px; }
     }
   `]
 })
@@ -179,7 +196,7 @@ export class TableOrdersPage implements OnInit, OnDestroy {
   );
 
   constructor() {
-    addIcons({ checkmarkCircle, time, restaurant, bicycle, refreshOutline, cartOutline, closeCircle });
+    addIcons({ checkmarkCircle, time, timeOutline, restaurant, bicycle, refreshOutline, cartOutline, closeCircle });
   }
 
   ngOnInit(): void {
@@ -205,7 +222,7 @@ export class TableOrdersPage implements OnInit, OnDestroy {
     if (orders.length === 0) return;
 
     this.stomp.configure({
-      brokerURL: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws/websocket`,
+      brokerURL: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws`,
       reconnectDelay: 5000,
     });
     this.stomp.activate();
@@ -242,6 +259,10 @@ export class TableOrdersPage implements OnInit, OnDestroy {
       },
       error: () => event.target.complete()
     });
+  }
+
+  formatTime(iso: string): string {
+    return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   }
 
   orderLabel(s: string): string {

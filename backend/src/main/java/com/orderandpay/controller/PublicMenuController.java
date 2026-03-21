@@ -8,8 +8,10 @@ import com.orderandpay.entity.RestaurantTable;
 import com.orderandpay.repository.OrderRepository;
 import com.orderandpay.repository.ProductRepository;
 import com.orderandpay.repository.TableRepository;
+import com.orderandpay.dto.OrderEventDto;
 import com.orderandpay.service.MenuService;
 import com.orderandpay.service.OrderService;
+import com.orderandpay.websocket.OrderEventPublisher;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,6 +22,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -42,6 +46,7 @@ public class PublicMenuController {
     private final ProductRepository productRepository;
     private final MenuService       menuService;
     private final OrderService      orderService;
+    private final OrderEventPublisher eventPublisher;
 
     /**
      * Endpoint sans authentification : le client scanne le QR code,
@@ -60,13 +65,16 @@ public class PublicMenuController {
     @GetMapping("/tables")
     public ResponseEntity<?> listTables() {
         List<Map<String, Object>> tables = tableRepository.findAllByOrderByLabel().stream()
-                .map(t -> Map.<String, Object>of(
-                        "id",       t.getId().toString(),
-                        "label",    t.getLabel(),
-                        "qrToken",  t.getQrToken() != null ? t.getQrToken() : "",
-                        "status",   t.getStatus().name(),
-                        "capacity", t.getCapacity()
-                ))
+                .map(t -> {
+                    Map<String, Object> map = new java.util.LinkedHashMap<>();
+                    map.put("id",           t.getId().toString());
+                    map.put("label",        t.getLabel());
+                    map.put("qrToken",      t.getQrToken() != null ? t.getQrToken() : "");
+                    map.put("status",       t.getStatus().name());
+                    map.put("capacity",     t.getCapacity());
+                    map.put("restaurantId", t.getRestaurant().getId().toString());
+                    return map;
+                })
                 .toList();
         return ResponseEntity.ok(tables);
     }
@@ -124,6 +132,9 @@ public class PublicMenuController {
         tableRepository.findById(tableId).ifPresent(table -> {
             table.setStatus(RestaurantTable.TableStatus.FREE);
             tableRepository.save(table);
+            UUID restaurantId = table.getRestaurant().getId();
+            eventPublisher.notifyTables(restaurantId,
+                    OrderEventDto.tableStatusChanged(restaurantId, table.getId(), table.getLabel(), "FREE"));
         });
         return ResponseEntity.noContent().build();
     }
@@ -136,10 +147,30 @@ public class PublicMenuController {
         if (tableOpt.isEmpty()) return ResponseEntity.notFound().build();
 
         RestaurantTable table = tableOpt.get();
+
+        // Après nettoyage (FREE), aucune commande à afficher (nouvelle session)
+        if (table.getStatus() == RestaurantTable.TableStatus.FREE
+                || table.getStatus() == RestaurantTable.TableStatus.RESERVED) {
+            return ResponseEntity.ok(List.of());
+        }
+
+        // Quand la table est à nettoyer (DIRTY), on montre toutes les commandes y compris
+        // les commandes livrées/payées pour permettre la consultation avant nettoyage.
+        // Sinon (OCCUPIED), on masque les commandes déjà livrées/payées.
+        boolean isDirty = table.getStatus() == RestaurantTable.TableStatus.DIRTY;
+
+        // Filtre sur la session courante : on n'affiche que les commandes
+        // passées depuis le début de la session (sessionStartedAt).
+        // Fallback : 24h si la colonne est null (tables créées avant la migration).
+        Instant sessionStart = table.getSessionStartedAt() != null
+                ? table.getSessionStartedAt()
+                : Instant.now().minus(24, ChronoUnit.HOURS);
+
         List<Map<String, Object>> orders = orderRepository.findActiveOrdersByTableId(table.getId())
                 .stream()
-                .filter(o -> o.getStatus() != Order.OrderStatus.DELIVERED
-                          && o.getStatus() != Order.OrderStatus.PAID)
+                .filter(o -> o.getConfirmedAt() != null && o.getConfirmedAt().isAfter(sessionStart))
+                .filter(o -> isDirty || (o.getStatus() != Order.OrderStatus.DELIVERED
+                          && o.getStatus() != Order.OrderStatus.PAID))
                 .map(o -> {
                     List<Map<String, Object>> lines = o.getLines().stream()
                             .filter(l -> l.getStatus() != OrderLine.LineStatus.CANCELLED)
@@ -153,10 +184,11 @@ public class PublicMenuController {
                             })
                             .toList();
                     java.util.Map<String, Object> om = new java.util.LinkedHashMap<>();
-                    om.put("orderId",  o.getId().toString());
-                    om.put("status",   o.getStatus().name());
-                    om.put("totalTtc", o.getTotalTtc());
-                    om.put("lines",    lines);
+                    om.put("orderId",     o.getId().toString());
+                    om.put("status",      o.getStatus().name());
+                    om.put("totalTtc",    o.getTotalTtc());
+                    om.put("confirmedAt", o.getConfirmedAt() != null ? o.getConfirmedAt().toString() : null);
+                    om.put("lines",       lines);
                     return om;
                 })
                 .toList();
@@ -224,12 +256,13 @@ public class PublicMenuController {
                 ))
                 .toList();
 
-        return ResponseEntity.ok(Map.of(
-                "orderId",    order.getId().toString(),
-                "tableLabel", order.getTable() != null ? order.getTable().getLabel() : "",
-                "status",     order.getStatus().name(),
-                "totalTtc",   order.getTotalTtc(),
-                "lines",      lines
-        ));
+        Map<String, Object> resp = new java.util.LinkedHashMap<>();
+        resp.put("orderId",      order.getId().toString());
+        resp.put("tableLabel",   order.getTable() != null ? order.getTable().getLabel() : "");
+        resp.put("status",       order.getStatus().name());
+        resp.put("totalTtc",     order.getTotalTtc());
+        resp.put("confirmedAt",  order.getConfirmedAt() != null ? order.getConfirmedAt().toString() : null);
+        resp.put("lines",        lines);
+        return ResponseEntity.ok(resp);
     }
 }

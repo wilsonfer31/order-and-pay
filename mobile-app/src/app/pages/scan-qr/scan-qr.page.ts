@@ -1,7 +1,8 @@
 import {
   Component, OnInit, OnDestroy, AfterViewInit,
-  ChangeDetectionStrategy, signal, NgZone, inject
+  ChangeDetectionStrategy, signal, NgZone, inject, ChangeDetectorRef
 } from '@angular/core';
+import { ViewWillEnter } from '@ionic/angular';
 import { CommonModule }     from '@angular/common';
 import { Router }           from '@angular/router';
 import { FormsModule }      from '@angular/forms';
@@ -15,6 +16,9 @@ import { qrCodeOutline, keypadOutline, cameraOutline } from 'ionicons/icons';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { HttpClient } from '@angular/common/http';
 import { TableService, TableInfo } from '../../services/table.service';
+import { RxStomp, RxStompState } from '@stomp/rx-stomp';
+import { Subject, takeUntil, filter, skip, distinctUntilChanged } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 @Component({
   selector: 'app-scan-qr',
@@ -145,12 +149,13 @@ import { TableService, TableInfo } from '../../services/table.service';
     /* ── Grille de tables ── */
     .tables-page {
       padding: 16px;
-      background: #f5f5f5;
+      background: #FFFBF7;
       min-height: 100%;
     }
     .tables-hint {
-      font-size: 14px; font-weight: 600; color: #555;
-      margin: 0 0 12px; text-align: center;
+      font-size: 14px; font-weight: 700; color: #57534E;
+      margin: 0 0 14px; text-align: center;
+      letter-spacing: .01em;
     }
     .center-spinner {
       display: flex; justify-content: center; padding: 60px;
@@ -163,46 +168,55 @@ import { TableService, TableInfo } from '../../services/table.service';
     }
     .table-btn {
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 4px; padding: 14px 8px;
-      border-radius: 12px; border: 2px solid #ddd;
-      background: white; cursor: pointer;
-      transition: border-color .15s, background .15s;
-      &:hover:not(:disabled) { border-color: var(--ion-color-primary); background: #eff6ff; }
+      gap: 4px; padding: 16px 8px;
+      border-radius: 14px; border: 2px solid #E7E5E4;
+      background: #fff; cursor: pointer;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+      transition: border-color .15s, background .15s, transform .1s, box-shadow .15s;
+      &:hover:not(:disabled) {
+        border-color: #F97316; background: #FFF7ED;
+        transform: translateY(-1px); box-shadow: 0 4px 10px rgba(249,115,22,.15);
+      }
       &:disabled { opacity: .5; cursor: not-allowed; }
     }
-    .table-btn--occupied { background: #fef2f2; border-color: #fca5a5; }
-    .table-btn--reserved { background: #fffbeb; border-color: #fcd34d; }
-    .table-btn--dirty    { background: #faf5ff; border-color: #d8b4fe; }
+    .table-btn--occupied { background: #FEF2F2; border-color: #FECACA; }
+    .table-btn--reserved { background: #FFFBEB; border-color: #FDE68A; }
+    .table-btn--dirty    { background: #FAF5FF; border-color: #DDD6FE; }
     .table-btn__clean {
-      margin-top: 4px; padding: 3px 8px;
-      background: #16a34a; color: white;
-      border: none; border-radius: 6px;
+      margin-top: 4px; padding: 3px 10px;
+      background: #10B981; color: white;
+      border: none; border-radius: 20px;
       font-size: 10px; font-weight: 700; cursor: pointer;
     }
-    .table-btn__label { font-size: 20px; font-weight: 800; color: #111; }
-    .table-btn__cap   { font-size: 11px; color: #888; }
-    .table-btn__status { font-size: 10px; font-weight: 600; text-transform: uppercase;
-      letter-spacing: .04em; color: #666; }
+    .table-btn__label { font-size: 22px; font-weight: 800; color: #1C1917; }
+    .table-btn__cap   { font-size: 11px; color: #9CA3AF; }
+    .table-btn__status {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; color: #78716C;
+    }
 
     /* ── Saisie manuelle ── */
     .manual-fallback {
-      border-top: 1px solid #e5e7eb;
+      border-top: 1px solid #E7E5E4;
       padding-top: 20px; margin-top: 4px;
     }
     .manual-fallback__title {
-      font-size: 13px; color: #777; margin: 0 0 10px; text-align: center;
+      font-size: 13px; color: #9CA3AF; margin: 0 0 10px; text-align: center;
     }
     .manual-row { display: flex; gap: 8px; }
     .manual-input {
-      flex: 1; padding: 10px 12px; border-radius: 8px;
-      border: 1px solid #d1d5db; font-size: 15px; outline: none;
-      &:focus { border-color: var(--ion-color-primary); }
+      flex: 1; padding: 11px 14px; border-radius: 10px;
+      border: 1.5px solid #E7E5E4; font-size: 15px; outline: none;
+      background: #fff;
+      transition: border-color .15s, box-shadow .15s;
+      &:focus { border-color: #F97316; box-shadow: 0 0 0 3px rgba(249,115,22,.12); }
     }
     .manual-confirm-btn {
-      padding: 10px 18px; border-radius: 8px;
-      background: var(--ion-color-primary); color: white;
-      border: none; font-size: 14px; font-weight: 600; cursor: pointer;
-      &:disabled { opacity: .5; cursor: not-allowed; }
+      padding: 11px 20px; border-radius: 10px;
+      background: linear-gradient(135deg, #F97316, #EA580C); color: white;
+      border: none; font-size: 14px; font-weight: 700; cursor: pointer;
+      box-shadow: 0 2px 8px rgba(249,115,22,.3);
+      &:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
     }
     .manual-error { display: block; padding: 8px 4px; font-size: 13px; }
     .scanner-toggle { margin-top: 20px; }
@@ -211,12 +225,12 @@ import { TableService, TableInfo } from '../../services/table.service';
     .scanner-page {
       display: flex; flex-direction: column;
       height: 100%; min-height: calc(100vh - 56px);
-      background: #111; color: white; padding: 0;
+      background: #0F172A; color: white; padding: 0;
     }
     .scanner-hint {
       display: flex; align-items: center; gap: 10px;
-      padding: 16px 20px; background: rgba(0,0,0,.4);
-      font-size: 14px; color: rgba(255,255,255,.85);
+      padding: 16px 20px; background: rgba(0,0,0,.5);
+      font-size: 14px; color: rgba(255,255,255,.80);
     }
     .scanner-frame-wrapper {
       position: relative; flex: 1; min-height: 300px;
@@ -233,10 +247,10 @@ import { TableService, TableInfo } from '../../services/table.service';
       justify-content: center; gap: 12px; color: white; font-size: 14px;
     }
     .error-card { margin: 12px 16px; }
-    .scanner-actions { padding: 16px; background: #111; }
+    .scanner-actions { padding: 16px; background: #0F172A; }
   `]
 })
-export class ScanQrPage implements OnInit, AfterViewInit, OnDestroy {
+export class ScanQrPage implements OnInit, AfterViewInit, OnDestroy, ViewWillEnter {
   private router       = inject(Router);
   private http         = inject(HttpClient);
   private tableService = inject(TableService);
@@ -253,15 +267,72 @@ export class ScanQrPage implements OnInit, AfterViewInit, OnDestroy {
   private scanner: Html5Qrcode | null = null;
   private scannerRunning = false;
   private destroyed = false;
+  private stomp = new RxStomp();
+  private destroy$ = new Subject<void>();
 
   constructor() {
     addIcons({ qrCodeOutline, keypadOutline, cameraOutline });
   }
 
   ngOnInit(): void {
+    this.loadTables();
+  }
+
+  ionViewWillEnter(): void {
+    // Rafraîchit les statuts à chaque retour sur la page (IonRouterOutlet cache les pages)
+    this.refreshTables();
+  }
+
+  private loadTables(): void {
     this.tableService.listAll().subscribe({
-      next: tables => { this.tables.set(tables); this.tablesLoading.set(false); },
-      error: ()     => this.tablesLoading.set(false),
+      next: tables => {
+        this.tables.set(tables);
+        this.tablesLoading.set(false);
+        const restaurantId = tables[0]?.restaurantId;
+        if (restaurantId) this.connectTableWebSocket(restaurantId);
+      },
+      error: () => this.tablesLoading.set(false),
+    });
+  }
+
+  private refreshTables(): void {
+    this.tableService.listAll().subscribe({
+      next: tables => this.tables.set(tables),
+    });
+  }
+
+  private connectTableWebSocket(restaurantId: string): void {
+    this.stomp.configure({
+      brokerURL: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws`,
+      reconnectDelay: 5000,
+    });
+    this.stomp.activate();
+
+    this.stomp.watch(`/topic/tables/${restaurantId}`)
+      .pipe(
+        map(msg => JSON.parse(msg.body)),
+        takeUntil(this.destroy$)
+      )
+      .subscribe(event => {
+        if (event.eventType === 'TABLE_STATUS_CHANGED' && event.tableId && event.tableStatus) {
+          this.ngZone.run(() => {
+            this.tables.update(list =>
+              list.map(t => t.id === event.tableId ? { ...t, status: event.tableStatus } : t)
+            );
+          });
+        } else if (event.eventType === 'TABLES_UPDATED') {
+          this.ngZone.run(() => this.refreshTables());
+        }
+      });
+
+    // Rafraîchit les tables à chaque reconnexion WebSocket (rattrape les events manqués)
+    this.stomp.connectionState$.pipe(
+      distinctUntilChanged(),
+      filter(state => state === RxStompState.OPEN),
+      skip(1), // ignore la connexion initiale (déjà gérée par loadTables)
+      takeUntil(this.destroy$)
+    ).subscribe(() => {
+      this.ngZone.run(() => this.refreshTables());
     });
   }
 
@@ -394,5 +465,8 @@ export class ScanQrPage implements OnInit, AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroyed = true;
     this.stopScanner();
+    this.destroy$.next();
+    this.destroy$.complete();
+    this.stomp.deactivate();
   }
 }

@@ -13,6 +13,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -101,6 +104,48 @@ public class OrderController {
         resp.put("lineId", line.getId().toString());
         resp.put("status", line.getStatus().name());
         return ResponseEntity.ok(resp);
+    }
+
+    /** Historique de toutes les commandes (hors DRAFT), filtrables par plage de dates. */
+    @GetMapping("/history")
+    public List<Map<String, Object>> history(
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+
+        Instant fromInstant = (from != null && !from.isBlank())
+                ? LocalDate.parse(from).atStartOfDay(ZoneOffset.UTC).toInstant()
+                : Instant.EPOCH;
+        Instant toInstant = (to != null && !to.isBlank())
+                ? LocalDate.parse(to).plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant()
+                : Instant.now().plus(36500, java.time.temporal.ChronoUnit.DAYS);
+
+        return orderRepository.findHistory(TenantContext.getCurrentTenant(), fromInstant, toInstant)
+                .stream()
+                .map(o -> {
+                    var lines = o.getLines().stream()
+                            .filter(l -> l.getStatus() != OrderLine.LineStatus.CANCELLED)
+                            .map(l -> {
+                                java.util.LinkedHashMap<String, Object> lm = new java.util.LinkedHashMap<>();
+                                lm.put("productName", l.getProduct().getName());
+                                lm.put("quantity",    l.getQuantity());
+                                lm.put("unitPriceHt",  l.getUnitPriceHt());
+                                return lm;
+                            })
+                            .toList();
+                    java.util.LinkedHashMap<String, Object> om = new java.util.LinkedHashMap<>();
+                    om.put("orderId",      o.getId().toString());
+                    om.put("orderNumber",  o.getOrderNumber());
+                    om.put("tableLabel",   o.getTable() != null ? o.getTable().getLabel() : "—");
+                    om.put("status",       o.getStatus().name());
+                    om.put("source",       o.getSource() != null ? o.getSource().name() : "CLIENT_APP");
+                    om.put("totalHt",      o.getTotalHt());
+                    om.put("totalTtc",     o.getTotalTtc());
+                    om.put("confirmedAt",  o.getConfirmedAt() != null ? o.getConfirmedAt().toString() : null);
+                    om.put("paidAt",       o.getPaidAt() != null ? o.getPaidAt().toString() : null);
+                    om.put("lines",        lines);
+                    return (Map<String, Object>) om;
+                })
+                .toList();
     }
 
     @PostMapping("/{id}/pay")

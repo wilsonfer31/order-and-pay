@@ -37,4 +37,8 @@ public class OrderEventPublisher {
     public void notifyDashboard(UUID restaurantId, OrderEventDto event) {
         broker.convertAndSend("/topic/dashboard/" + restaurantId, event);
     }
+
+    public void notifyTables(UUID restaurantId, OrderEventDto event) {
+        broker.convertAndSend("/topic/tables/" + restaurantId, event);
+    }
 }

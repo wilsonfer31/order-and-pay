@@ -3,15 +3,15 @@ import {
   ChangeDetectionStrategy, signal, inject
 } from '@angular/core';
 import { CommonModule }      from '@angular/common';
-import { ActivatedRoute }    from '@angular/router';
+import { ActivatedRoute, Router }    from '@angular/router';
 import { HttpClient }        from '@angular/common/http';
 import {
-  IonContent, IonHeader, IonToolbar, IonTitle,
+  IonContent, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton,
   IonProgressBar, IonChip, IonLabel, IonCard, IonCardContent,
   IonIcon, IonList, IonItem
 } from '@ionic/angular/standalone';
 import { addIcons }          from 'ionicons';
-import { checkmarkCircle, time, restaurant, bicycle } from 'ionicons/icons';
+import { checkmarkCircle, time, timeOutline, restaurant, bicycle, homeOutline } from 'ionicons/icons';
 import { RxStomp }           from '@stomp/rx-stomp';
 import { Subject, takeUntil } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -31,6 +31,7 @@ export interface OrderState {
   status: OrderStatus;
   lines: OrderLine[];
   totalTtc: number;
+  confirmedAt?: string | null;
   estimatedMinutes?: number;
 }
 
@@ -42,7 +43,7 @@ const STATUS_STEPS: OrderStatus[] = ['CONFIRMED', 'IN_PROGRESS', 'READY', 'DELIV
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     CommonModule,
-    IonContent, IonHeader, IonToolbar, IonTitle,
+    IonContent, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton,
     IonProgressBar, IonChip, IonLabel, IonCard, IonCardContent,
     IonIcon, IonList, IonItem
   ],
@@ -50,6 +51,12 @@ const STATUS_STEPS: OrderStatus[] = ['CONFIRMED', 'IN_PROGRESS', 'READY', 'DELIV
 <ion-header>
   <ion-toolbar color="primary">
     <ion-title>Votre commande</ion-title>
+    <ion-buttons slot="end" style="z-index:100;position:relative">
+      <ion-button (click)="goHome()" style="--color:#fff;font-size:13px;font-weight:600">
+        <ion-icon slot="start" name="home-outline"></ion-icon>
+        Accueil
+      </ion-button>
+    </ion-buttons>
   </ion-toolbar>
 </ion-header>
 
@@ -77,6 +84,14 @@ const STATUS_STEPS: OrderStatus[] = ['CONFIRMED', 'IN_PROGRESS', 'READY', 'DELIV
       color="primary"
       style="margin-bottom: 24px; border-radius: 8px">
     </ion-progress-bar>
+
+    <!-- Heure de prise de commande -->
+    @if (order()?.confirmedAt) {
+      <div class="order-time">
+        <ion-icon name="time-outline" style="font-size:16px;flex-shrink:0"></ion-icon>
+        Commande prise à <strong>{{ formatTime(order()!.confirmedAt!) }}</strong>
+      </div>
+    }
 
     <!-- Message contextuel -->
     <div class="status-message">
@@ -127,39 +142,58 @@ const STATUS_STEPS: OrderStatus[] = ['CONFIRMED', 'IN_PROGRESS', 'READY', 'DELIV
       gap: 6px;
     }
     .step__icon {
-      width: 40px; height: 40px;
+      width: 44px; height: 44px;
       border-radius: 50%;
-      background: #e0e0e0;
+      background: #E7E5E4;
       display: flex; align-items: center; justify-content: center;
-      font-size: 18px;
-      transition: background .3s;
+      font-size: 20px;
+      transition: background .3s, box-shadow .3s;
     }
-    .step--active .step__icon { background: var(--ion-color-primary); color: white; }
-    .step--done   .step__icon { background: #4caf50; color: white; }
-    .step__label  { font-size: 10px; color: #888; text-align: center; max-width: 60px; }
-    .step__connector { flex: 1; height: 3px; background: #e0e0e0; transition: background .3s; }
-    .step__connector--done { background: #4caf50; }
+    .step--active .step__icon {
+      background: #F97316; color: white;
+      box-shadow: 0 3px 10px rgba(249,115,22,.35);
+    }
+    .step--done .step__icon {
+      background: #10B981; color: white;
+      box-shadow: 0 3px 8px rgba(16,185,129,.25);
+    }
+    .step__label { font-size: 10px; color: #9CA3AF; text-align: center; max-width: 60px; font-weight: 600; }
+    .step--active .step__label { color: #F97316; }
+    .step--done   .step__label { color: #10B981; }
+    .step__connector { flex: 1; height: 3px; background: #E7E5E4; transition: background .3s; margin: 0 4px; }
+    .step__connector--done { background: #10B981; }
 
+    .order-time {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; color: #78716C;
+      background: #F5F5F4; border-radius: 10px;
+      padding: 10px 14px; margin-bottom: 12px;
+      strong { color: #1C1917; }
+    }
     .status-message {
-      text-align: center;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 600;
-      padding: 16px;
-      background: #f5f5f5;
-      border-radius: 12px;
+      padding: 14px 18px;
+      background: #FFF7ED;
+      border-left: 4px solid #F97316;
+      border-radius: 0 12px 12px 0;
       margin-bottom: 20px;
+      color: #1C1917;
     }
     .total-row {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       padding-top: 12px;
-      border-top: 1px solid #eee;
+      border-top: 1px solid #F5F5F4;
       font-size: 16px;
+      strong { color: #F97316; font-size: 18px; }
     }
   `]
 })
 export class OrderTrackingPage implements OnInit, OnDestroy {
   private route   = inject(ActivatedRoute);
+  private router  = inject(Router);
   private http    = inject(HttpClient);
   private destroy$ = new Subject<void>();
   private stomp   = new RxStomp();
@@ -175,7 +209,7 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
   };
 
   constructor() {
-    addIcons({ checkmarkCircle, time, restaurant, bicycle });
+    addIcons({ checkmarkCircle, time, timeOutline, restaurant, bicycle, homeOutline });
   }
 
   ngOnInit(): void {
@@ -198,7 +232,7 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
 
   private connectWebSocket(orderId: string): void {
     this.stomp.configure({
-      brokerURL: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws/websocket`,
+      brokerURL: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws`,
       reconnectDelay: 5000,
     });
     this.stomp.activate();
@@ -229,6 +263,14 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
         } : o);
         break;
     }
+  }
+
+  goHome(): void {
+    this.router.navigate(['/scan']);
+  }
+
+  formatTime(iso: string): string {
+    return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   }
 
   statusMessage(): string {

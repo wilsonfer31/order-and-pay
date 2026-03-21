@@ -10,11 +10,13 @@ export interface OrderEvent {
   orderId: string;
   tableId?: string;
   tableLabel?: string;
+  tableStatus?: string;
   orderStatus?: string;
   lineStatus?: string;
   lineId?: string;
   productName?: string;
   occurredAt: string;
+  lines?: { name: string; quantity: number }[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -26,7 +28,7 @@ export class WebSocketService implements OnDestroy {
 
   connect(): void {
     const config: RxStompConfig = {
-      brokerURL: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws/websocket`,
+      brokerURL: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/ws`,
       connectHeaders: {
         Authorization: `Bearer ${this.auth.getToken()}`
       },
@@ -66,6 +68,16 @@ export class WebSocketService implements OnDestroy {
   floorEvents$(restaurantId: string): Observable<OrderEvent> {
     return this.stomp
       .watch(`/topic/floor/${restaurantId}`)
+      .pipe(
+        map(msg => JSON.parse(msg.body) as OrderEvent),
+        takeUntil(this.destroy$)
+      );
+  }
+
+  /** Écoute les TABLE_STATUS_CHANGED en temps réel. */
+  tablesEvents$(restaurantId: string): Observable<OrderEvent> {
+    return this.stomp
+      .watch(`/topic/tables/${restaurantId}`)
       .pipe(
         map(msg => JSON.parse(msg.body) as OrderEvent),
         takeUntil(this.destroy$)

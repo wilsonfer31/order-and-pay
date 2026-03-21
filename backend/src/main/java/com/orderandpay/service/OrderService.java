@@ -84,19 +84,32 @@ public class OrderService {
         Order saved = orderRepository.save(order);
 
         // Mise à jour statut table
+        if (table.getStatus() != RestaurantTable.TableStatus.OCCUPIED) {
+            table.setSessionStartedAt(Instant.now());
+        }
         table.setStatus(RestaurantTable.TableStatus.OCCUPIED);
         tableRepository.save(table);
 
+        eventPublisher.notifyTables(restaurantId,
+                OrderEventDto.tableStatusChanged(restaurantId, table.getId(), table.getLabel(), "OCCUPIED"));
+
+        // Lignes de commande pour l'événement WebSocket
+        var lineItems = saved.getLines().stream()
+                .filter(l -> l.getStatus() != OrderLine.LineStatus.CANCELLED)
+                .map(l -> {
+                    String name = l.getProductSnapshot() != null
+                            ? (String) l.getProductSnapshot().get("name")
+                            : l.getProduct().getName();
+                    return new OrderEventDto.LineItem(name, l.getQuantity());
+                })
+                .toList();
+
         // Notification WebSocket
-        eventPublisher.notifyKitchen(restaurantId,
-                OrderEventDto.orderCreated(restaurantId, saved.getId(),
-                        table.getId(), table.getLabel()));
-        eventPublisher.notifyFloor(restaurantId,
-                OrderEventDto.orderCreated(restaurantId, saved.getId(),
-                        table.getId(), table.getLabel()));
-        eventPublisher.notifyDashboard(restaurantId,
-                OrderEventDto.orderCreated(restaurantId, saved.getId(),
-                        table.getId(), table.getLabel()));
+        var createdEvent = OrderEventDto.orderCreated(restaurantId, saved.getId(),
+                table.getId(), table.getLabel(), lineItems);
+        eventPublisher.notifyKitchen(restaurantId, createdEvent);
+        eventPublisher.notifyFloor(restaurantId, createdEvent);
+        eventPublisher.notifyDashboard(restaurantId, createdEvent);
 
         log.info("Commande {} créée pour table {} ({})", saved.getId(), table.getLabel(), restaurantId);
         return saved;
@@ -114,6 +127,20 @@ public class OrderService {
                 .orElseThrow(() -> new IllegalArgumentException("Ligne introuvable"));
 
         line.setStatus(newStatus);
+
+        // Si une ligne passe en COOKING et que la commande est encore CONFIRMED, la passer en IN_PROGRESS
+        if (newStatus == OrderLine.LineStatus.COOKING
+                && order.getStatus() == Order.OrderStatus.CONFIRMED) {
+            order.setStatus(Order.OrderStatus.IN_PROGRESS);
+            var statusEvent = OrderEventDto.orderStatusChanged(restaurantId, orderId,
+                    order.getTable() != null ? order.getTable().getId() : null,
+                    order.getTable() != null ? order.getTable().getLabel() : null,
+                    Order.OrderStatus.IN_PROGRESS);
+            eventPublisher.notifyKitchen(restaurantId, statusEvent);
+            eventPublisher.notifyFloor(restaurantId, statusEvent);
+            eventPublisher.notifyClient(orderId, statusEvent);
+        }
+
         orderRepository.save(order);
 
         // Notifie la cuisine ET le client mobile
@@ -122,12 +149,39 @@ public class OrderService {
         eventPublisher.notifyKitchen(restaurantId, event);
         eventPublisher.notifyClient(orderId, event);
 
-        // Si toutes les lignes sont READY, notifie la salle
-        boolean allReady = order.getLines().stream()
+        var nonCancelledLines = order.getLines().stream()
                 .filter(l -> l.getStatus() != OrderLine.LineStatus.CANCELLED)
+                .toList();
+
+        boolean allServed = nonCancelledLines.stream()
+                .allMatch(l -> l.getStatus() == OrderLine.LineStatus.SERVED);
+
+        boolean allReadyOrServed = nonCancelledLines.stream()
                 .allMatch(l -> l.getStatus() == OrderLine.LineStatus.READY
                             || l.getStatus() == OrderLine.LineStatus.SERVED);
-        if (allReady) {
+
+        if (allServed) {
+            // Toutes les lignes servies → commande automatiquement livrée
+            order.setStatus(Order.OrderStatus.DELIVERED);
+            order.setPaidAt(Instant.now());
+            orderRepository.save(order);
+
+            var deliveredEvent = OrderEventDto.orderStatusChanged(restaurantId, orderId,
+                    order.getTable() != null ? order.getTable().getId() : null,
+                    order.getTable() != null ? order.getTable().getLabel() : null,
+                    Order.OrderStatus.DELIVERED);
+            eventPublisher.notifyKitchen(restaurantId, deliveredEvent);
+            eventPublisher.notifyFloor(restaurantId, deliveredEvent);
+            eventPublisher.notifyClient(orderId, deliveredEvent);
+            eventPublisher.notifyDashboard(restaurantId,
+                    OrderEventDto.orderPaid(restaurantId, orderId));
+
+            // Table DIRTY seulement si TOUTES les commandes de la table sont terminées
+            if (order.getTable() != null) {
+                markTableDirtyIfAllOrdersComplete(restaurantId, order.getTable());
+            }
+
+        } else if (allReadyOrServed) {
             order.setStatus(Order.OrderStatus.READY);
             orderRepository.save(order);
             eventPublisher.notifyFloor(restaurantId,
@@ -145,16 +199,16 @@ public class OrderService {
 
         order.setStatus(newStatus);
 
-        // Quand la commande est servie, on la comptabilise dans le CA
         if (newStatus == Order.OrderStatus.DELIVERED) {
             order.setPaidAt(Instant.now());
-            if (order.getTable() != null) {
-                order.getTable().setStatus(RestaurantTable.TableStatus.DIRTY);
-                tableRepository.save(order.getTable());
-            }
         }
 
         Order saved = orderRepository.save(order);
+
+        // Table DIRTY seulement si TOUTES les commandes de la table sont terminées
+        if (newStatus == Order.OrderStatus.DELIVERED && order.getTable() != null) {
+            markTableDirtyIfAllOrdersComplete(restaurantId, order.getTable());
+        }
 
         var statusEvent = OrderEventDto.orderStatusChanged(restaurantId, orderId,
                 order.getTable() != null ? order.getTable().getId() : null,
@@ -192,6 +246,21 @@ public class OrderService {
         }
     }
 
+    /** Passe la table en DIRTY uniquement si toutes ses commandes actives sont DELIVERED ou PAID. */
+    private void markTableDirtyIfAllOrdersComplete(UUID restaurantId, RestaurantTable table) {
+        boolean allDone = orderRepository.findActiveOrdersByTableId(table.getId())
+                .stream()
+                .allMatch(o -> o.getStatus() == Order.OrderStatus.DELIVERED
+                            || o.getStatus() == Order.OrderStatus.PAID
+                            || o.getStatus() == Order.OrderStatus.CANCELLED);
+        if (allDone) {
+            table.setStatus(RestaurantTable.TableStatus.DIRTY);
+            tableRepository.save(table);
+            eventPublisher.notifyTables(restaurantId,
+                    OrderEventDto.tableStatusChanged(restaurantId, table.getId(), table.getLabel(), "DIRTY"));
+        }
+    }
+
     @Transactional
     public Order markPaid(UUID restaurantId, UUID orderId) {
         Order order = orderRepository.findByIdAndRestaurantId(orderId, restaurantId)
@@ -201,10 +270,9 @@ public class OrderService {
         order.setPaidAt(Instant.now());
         Order saved = orderRepository.save(order);
 
-        // Libère la table
+        // Table DIRTY seulement si TOUTES les commandes de la table sont terminées
         if (order.getTable() != null) {
-            order.getTable().setStatus(RestaurantTable.TableStatus.DIRTY);
-            tableRepository.save(order.getTable());
+            markTableDirtyIfAllOrdersComplete(restaurantId, order.getTable());
         }
 
         eventPublisher.notifyDashboard(restaurantId,

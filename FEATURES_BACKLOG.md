@@ -132,6 +132,9 @@ Actuellement on filtre par date uniquement.
 ### ~~Confirmation visuelle lors de l'annulation de commande~~ ✅
 `MatDialog` avec `ConfirmDialogComponent` partagé dans l'admin (cuisine, menu CMS). `AlertController` Ionic dans la mobile app (suivi commande, commandes table). Plus aucun `window.confirm()` ni `alert()` natif.
 
+### ~~Redirection post-login selon le rôle~~ ✅
+Après connexion, l'utilisateur arrive sur la première page autorisée pour son rôle (KITCHEN → `/kitchen`, OWNER → `/dashboard`, etc.). Le `authGuard` bloque aussi l'accès aux pages non autorisées et redirige vers la bonne page.
+
 ---
 
 ## Infrastructure & DevOps

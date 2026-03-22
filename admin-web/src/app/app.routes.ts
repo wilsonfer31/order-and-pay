@@ -32,5 +32,10 @@ export const routes: Routes = [
     loadComponent: () => import('./features/orders/orders-history.component').then(m => m.OrdersHistoryComponent),
     canActivate: [authGuard]
   },
+  {
+    path: 'staff',
+    loadComponent: () => import('./features/staff/staff.component').then(m => m.StaffComponent),
+    canActivate: [authGuard]
+  },
   { path: '**', redirectTo: 'dashboard' }
 ];

@@ -65,6 +65,12 @@ import { AuthService }       from './core/services/auth.service';
             <span class="nav-label">Historique</span>
           </a>
         </li>
+        <li>
+          <a routerLink="/staff" routerLinkActive="active" class="nav-item" matTooltip="Équipe" matTooltipPosition="right" [matTooltipDisabled]="!collapsed()">
+            <mat-icon>people</mat-icon>
+            <span class="nav-label">Équipe</span>
+          </a>
+        </li>
       </ul>
 
       <div class="sidebar__footer">

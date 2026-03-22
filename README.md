@@ -131,19 +131,27 @@ Multi-tenant : chaque requête est scopée via TenantFilter → TenantContext
 
 ## Lancer le projet
 
+**Sans monitoring (app seule) :**
 ```bash
 git clone https://github.com/wilsonfer31/order-and-pay.git
 cd order-and-pay
-
-# App + monitoring (recommandé)
-docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
-
-# App uniquement
 docker-compose up --build
 ```
 
-> Le monitoring nécessite que le dossier `../monitoring-stack/` existe à côté du projet.
-> Voir [monitoring-stack](../monitoring-stack/README.md) pour l'installer.
+**Avec monitoring (Loki + Grafana + Prometheus) :**
+
+Le monitoring utilise un repo séparé qui doit être cloné **à côté** du projet :
+```bash
+git clone https://github.com/wilsonfer31/order-and-pay.git
+git clone https://github.com/wilsonfer31/monitoring-stack.git
+
+cd order-and-pay
+docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+```
+
+> ⚠️ Si tu lances avec `-f docker-compose.monitoring.yml` sans avoir cloné `monitoring-stack/` à côté,
+> les containers Loki, Grafana et Promtail refuseront de démarrer (fichiers de config introuvables).
+> L'app principale fonctionnera quand même — utilise `docker-compose up -d` dans ce cas.
 
 | Service | URL |
 |---|---|

@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public record ProductSaveDto(
     @NotBlank @Size(max = 150) String name,
-    String description,
+    @Size(max = 500) String description,
     UUID categoryId,
     @NotNull @Positive BigDecimal priceHt,
     @NotNull BigDecimal vatRate,

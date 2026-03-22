@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.MDC;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -33,6 +34,7 @@ public class TenantFilter extends OncePerRequestFilter {
                 UUID restaurantId = jwtService.extractRestaurantId(token);
                 if (restaurantId != null) {
                     TenantContext.setCurrentTenant(restaurantId);
+                    MDC.put("restaurantId", restaurantId.toString());
                 }
             } catch (Exception ignored) {
                 // Token invalide ou expiré — on continue sans tenant
@@ -42,6 +44,7 @@ public class TenantFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
         } finally {
             TenantContext.clear();
+            MDC.remove("restaurantId");
         }
     }
 }

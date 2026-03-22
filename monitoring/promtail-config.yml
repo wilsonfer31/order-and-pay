@@ -1,0 +1,53 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker-containers
+    docker_sd_configs:
+      - host:             unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          # Ne collecter que les containers du projet order-and-pay
+          - name:   label
+            values: ["com.docker.compose.project=order-and-pay"]
+
+    relabel_configs:
+      # Nom du container → label "container"
+      - source_labels: [__meta_docker_container_name]
+        regex:         /(.*)
+        target_label:  container
+
+      # Service compose → label "service"
+      - source_labels: [__meta_docker_compose_service]
+        target_label:  service
+
+    pipeline_stages:
+      # Tenter de parser le log comme du JSON (backend prod)
+      - json:
+          expressions:
+            level:       level
+            message:     message
+            requestId:   requestId
+            restaurantId: restaurantId
+            method:      method
+            path:        path
+
+      # Promouvoir les champs extraits en labels Loki (pour filtrer)
+      - labels:
+          level:
+          service:
+          container:
+
+      # Garder les champs métier dans les structured metadata (searchables)
+      - structured_metadata:
+          requestId:    requestId
+          restaurantId: restaurantId
+          method:       method
+          path:         path

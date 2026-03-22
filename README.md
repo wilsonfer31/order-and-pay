@@ -134,11 +134,98 @@ Multi-tenant : chaque requête est scopée via TenantFilter → TenantContext
 ```bash
 git clone https://github.com/wilsonfer31/order-and-pay.git
 cd order-and-pay
-docker compose up --build
+
+# App + monitoring (recommandé)
+docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+
+# App uniquement
+docker-compose up --build
 ```
+
+> Le monitoring nécessite que le dossier `../monitoring-stack/` existe à côté du projet.
+> Voir [monitoring-stack](../monitoring-stack/README.md) pour l'installer.
 
 | Service | URL |
 |---|---|
 | API Backend | http://localhost:8090 |
 | Admin Web | http://localhost:4201 |
 | Mobile App | http://localhost:8101 |
+| Grafana | http://localhost:3000 |
+
+### Compte démo
+
+| Email | Mot de passe | Rôle |
+|---|---|---|
+| admin@demo.fr | Admin123! | OWNER |
+
+---
+
+## Monitoring (optionnel)
+
+Stack de monitoring complète : logs + métriques système, disponible via un second fichier Compose.
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+```
+
+| Service | URL | Rôle |
+|---|---|---|
+| Grafana | http://localhost:3000 | Dashboards logs + métriques |
+| Prometheus | http://localhost:9090 | Stockage métriques |
+| Loki | http://localhost:3100 | Stockage logs |
+| cAdvisor | http://localhost:8088 | Métriques containers Docker |
+
+Login Grafana : `admin` / `admin` (à changer au premier démarrage).
+
+Deux dashboards sont pré-configurés automatiquement :
+
+**Order & Pay — Logs**
+- Logs en temps réel des containers `oap-backend`, `oap-admin`, `oap-mobile`, `oap-postgres`
+- Panneau dédié aux erreurs (ERROR / WARN) avec contexte utilisateur et origine de la requête
+- Volume de logs par container
+
+**Order & Pay — Métriques système**
+- RAM et CPU par container Docker (via cAdvisor)
+- RAM totale, disque et charge CPU de la machine hôte (via Node Exporter)
+- JVM Heap et requêtes HTTP/s du backend Spring Boot (via Actuator `/prometheus`)
+
+### Contexte dans les logs backend
+
+Chaque log backend inclut automatiquement :
+
+| Champ | Description |
+|---|---|
+| `user` | Email de l'utilisateur connecté (ou `anonymous`) |
+| `client` | `admin-web`, `mobile-app` ou `direct` |
+| `method` + `path` | Requête HTTP exacte |
+| `requestId` | UUID de corrélation bout en bout (injecté par nginx) |
+
+Exemple :
+```
+ERROR POST /api/orders/123/status → 500 | user=admin@demo.fr client=admin-web requestId=abc-123
+WARN  GET  /api/orders/999        → 404 | user=admin@demo.fr client=admin-web requestId=def-456
+```
+
+### Recommandations matériel (production)
+
+Pour faire tourner la stack complète (application + monitoring) en production :
+
+| Config | Recommandation |
+|---|---|
+| Machine | Raspberry Pi 5 4 Go minimum |
+| Stockage | SSD NVMe via HAT officiel (évite la corruption carte SD avec PostgreSQL) |
+| RAM monitoring | ~200 Mo supplémentaires pour Loki + Prometheus + Grafana |
+
+---
+
+## Variables d'environnement
+
+Créer un fichier `.env` à la racine avant le premier démarrage en production :
+
+```env
+DB_USER=orderandpay
+DB_PASSWORD=<mot de passe fort>
+JWT_SECRET=<openssl rand -base64 32>
+FRONTEND_URL=https://ton-domaine.com
+GRAFANA_PASSWORD=<mot de passe fort>
+```

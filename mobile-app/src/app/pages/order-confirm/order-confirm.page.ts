@@ -189,7 +189,8 @@ export class OrderConfirmPage implements OnInit {
       next: res => {
         this.cart.clear();
         this.submitting.set(false);
-        this.router.navigate(['/track'], { queryParams: { orderId: res.orderId } });
+        const t = this.route.snapshot.queryParams['t'];
+        this.router.navigate(['/track'], { queryParams: { orderId: res.orderId, t } });
       },
       error: err => {
         this.submitting.set(false);

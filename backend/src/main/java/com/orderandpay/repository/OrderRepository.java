@@ -1,6 +1,7 @@
 package com.orderandpay.repository;
 
 import com.orderandpay.entity.Order;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -71,18 +72,36 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     List<Order> findActiveOrdersByTableId(@Param("tableId") UUID tableId);
 
     @Query("""
-            SELECT DISTINCT o FROM Order o
-            LEFT JOIN FETCH o.lines l
-            LEFT JOIN FETCH l.product p
-            LEFT JOIN FETCH o.table t
+            SELECT COUNT(o) FROM Order o
+            WHERE o.restaurant.id = :restaurantId
+              AND o.status IN ('DELIVERED', 'PAID')
+              AND o.confirmedAt >= :from
+              AND o.confirmedAt <  :to
+           """)
+    long countHistory(@Param("restaurantId") UUID restaurantId,
+                      @Param("from") Instant from,
+                      @Param("to")   Instant to);
+
+    @Query("""
+            SELECT o.id FROM Order o
             WHERE o.restaurant.id = :restaurantId
               AND o.status IN ('DELIVERED', 'PAID')
               AND o.confirmedAt >= :from
               AND o.confirmedAt <  :to
             ORDER BY o.confirmedAt DESC
            """)
-    List<Order> findHistory(
-            @Param("restaurantId") UUID restaurantId,
-            @Param("from") Instant from,
-            @Param("to")   Instant to);
+    List<UUID> findHistoryIds(@Param("restaurantId") UUID restaurantId,
+                              @Param("from") Instant from,
+                              @Param("to")   Instant to,
+                              Pageable pageable);
+
+    @Query("""
+            SELECT DISTINCT o FROM Order o
+            LEFT JOIN FETCH o.lines l
+            LEFT JOIN FETCH l.product p
+            LEFT JOIN FETCH o.table t
+            WHERE o.id IN :ids
+            ORDER BY o.confirmedAt DESC
+           """)
+    List<Order> findHistoryByIds(@Param("ids") List<UUID> ids);
 }

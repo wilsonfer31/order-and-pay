@@ -1,6 +1,7 @@
 package com.orderandpay.controller;
 
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -35,7 +36,15 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, String>> handleRuntime(RuntimeException ex) {
-        log.error("Unexpected error", ex);
+        String user      = MDC.get("username");
+        String client    = MDC.get("clientApp");
+        String method    = MDC.get("method");
+        String path      = MDC.get("path");
+        String requestId = MDC.get("requestId");
+        log.error("Unexpected error | user={} client={} {} {} requestId={}",
+                user != null ? user : "anonymous",
+                client != null ? client : "unknown",
+                method, path, requestId, ex);
         return ResponseEntity.status(500).body(Map.of("message", "Erreur interne du serveur"));
     }
 }

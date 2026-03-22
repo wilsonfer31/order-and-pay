@@ -32,6 +32,13 @@ interface HistoryOrder {
   lines: OrderLine[];
 }
 
+interface HistoryPage {
+  orders: HistoryOrder[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 const STATUS_LABEL: Record<string, string> = {
   CONFIRMED: 'Confirmée', IN_PROGRESS: 'En cours', READY: 'Prête',
   DELIVERED: 'Livrée', PAID: 'Payée', CANCELLED: 'Annulée'
@@ -90,8 +97,8 @@ const STATUS_COLOR: Record<string, string> = {
   @if (orders().length > 0) {
     <div class="kpis">
       <div class="kpi">
-        <span class="kpi__value">{{ orders().length }}</span>
-        <span class="kpi__label">Commandes livrées</span>
+        <span class="kpi__value">{{ total() }}</span>
+        <span class="kpi__label">Total commandes</span>
       </div>
       <div class="kpi kpi--highlight">
         <span class="kpi__value">{{ totalTtc() | currency:'EUR':'symbol':'1.2-2':'fr' }}</span>
@@ -154,6 +161,21 @@ const STATUS_COLOR: Record<string, string> = {
         </mat-expansion-panel>
       }
     </mat-accordion>
+
+    @if (!loading() && total() > pageSize) {
+      <div class="pagination">
+        <span class="pagination__info">
+          {{ firstOnPage }}–{{ lastOnPage }} sur {{ total() }} commandes
+        </span>
+        <button mat-stroked-button [disabled]="page() === 0" (click)="prevPage()">
+          <mat-icon>chevron_left</mat-icon>
+        </button>
+        <span class="pagination__page">{{ page() + 1 }} / {{ totalPages }}</span>
+        <button mat-stroked-button [disabled]="page() + 1 >= totalPages" (click)="nextPage()">
+          <mat-icon>chevron_right</mat-icon>
+        </button>
+      </div>
+    }
   }
 
 </div>
@@ -226,14 +248,24 @@ const STATUS_COLOR: Record<string, string> = {
       display: flex; align-items: center; gap: 5px;
       font-size: 12px; color: #16a34a; margin-top: 8px; font-weight: 500;
     }
+
+    .pagination {
+      display: flex; align-items: center; gap: 12px; justify-content: center;
+      margin-top: 20px; padding: 16px;
+    }
+    .pagination__info { color: #6b7280; font-size: 14px; }
+    .pagination__page { font-weight: 600; color: #374151; min-width: 60px; text-align: center; }
   `]
 })
 export class OrdersHistoryComponent implements OnInit {
   private http = inject(HttpClient);
 
-  orders   = signal<HistoryOrder[]>([]);
-  loading  = signal(false);
+  orders    = signal<HistoryOrder[]>([]);
+  loading   = signal(false);
   firstLoad = signal(true);
+  page      = signal(0);
+  pageSize  = 50;
+  total     = signal(0);
 
   dateFrom    = '';
   dateTo      = '';
@@ -244,6 +276,10 @@ export class OrdersHistoryComponent implements OnInit {
   tva      = computed(() => this.totalTtc() - this.totalHt());
   avgTtc   = computed(() => this.orders().length ? this.totalTtc() / this.orders().length : 0);
 
+  get totalPages(): number { return Math.ceil(this.total() / this.pageSize); }
+  get firstOnPage(): number { return this.page() * this.pageSize + 1; }
+  get lastOnPage(): number { return Math.min((this.page() + 1) * this.pageSize, this.total()); }
+
   ngOnInit(): void {
     // Initialise les filtres sur "aujourd'hui"
     const today = new Date().toISOString().slice(0, 10);
@@ -251,18 +287,29 @@ export class OrdersHistoryComponent implements OnInit {
     this.dateTo   = today;
   }
 
-  load(): void {
+  load(resetPage = true): void {
+    if (resetPage) this.page.set(0);
     this.loading.set(true);
     this.firstLoad.set(false);
-    const params: Record<string, string> = {};
+    const params: Record<string, string> = {
+      page: String(this.page()),
+      pageSize: String(this.pageSize),
+    };
     if (this.dateFrom) params['from'] = this.dateFrom;
     if (this.dateTo)   params['to']   = this.dateTo;
 
-    this.http.get<HistoryOrder[]>('/orders/history', { params }).subscribe({
-      next:  data  => { this.orders.set(data);  this.loading.set(false); },
-      error: ()    => this.loading.set(false),
+    this.http.get<HistoryPage>('/orders/history', { params }).subscribe({
+      next: data => {
+        this.orders.set(data.orders);
+        this.total.set(data.total);
+        this.loading.set(false);
+      },
+      error: () => this.loading.set(false),
     });
   }
+
+  prevPage(): void { this.page.update(p => p - 1); this.load(false); }
+  nextPage(): void { this.page.update(p => p + 1); this.load(false); }
 
   reset(): void {
     const today = new Date().toISOString().slice(0, 10);
@@ -270,6 +317,8 @@ export class OrdersHistoryComponent implements OnInit {
     this.dateTo   = today;
     this.firstLoad.set(true);
     this.orders.set([]);
+    this.page.set(0);
+    this.total.set(0);
   }
 
   statusLabel(s: string): string { return STATUS_LABEL[s] ?? s; }

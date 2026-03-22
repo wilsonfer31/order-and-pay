@@ -9,6 +9,7 @@ import com.orderandpay.repository.OrderRepository;
 import com.orderandpay.repository.ProductRepository;
 import com.orderandpay.repository.TableRepository;
 import com.orderandpay.dto.OrderEventDto;
+import com.orderandpay.service.AuditService;
 import com.orderandpay.service.MenuService;
 import com.orderandpay.service.OrderService;
 import com.orderandpay.websocket.OrderEventPublisher;
@@ -21,13 +22,16 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import net.coobird.thumbnailator.Thumbnails;
+import net.coobird.thumbnailator.geometry.Positions;
+
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -47,6 +51,7 @@ public class PublicMenuController {
     private final MenuService       menuService;
     private final OrderService      orderService;
     private final OrderEventPublisher eventPublisher;
+    private final AuditService      auditService;
 
     /**
      * Endpoint sans authentification : le client scanne le QR code,
@@ -61,18 +66,38 @@ public class PublicMenuController {
         return ResponseEntity.ok(menuService.buildMenuResponse(table));
     }
 
-    /** Liste toutes les tables (pour la vue de sélection mobile). */
+    /**
+     * Liste les tables pour la vue de sélection mobile.
+     * - {@code restaurantId} : filtre direct par restaurant (cas nominal — app configurée)
+     * - {@code t} : résout le restaurant via QR token (après un premier scan)
+     * - aucun paramètre : retourne toutes les tables (compatibilité, déploiement mono-restaurant)
+     */
     @GetMapping("/tables")
-    public ResponseEntity<?> listTables() {
-        List<Map<String, Object>> tables = tableRepository.findAllByOrderByLabel().stream()
-                .map(t -> {
+    public ResponseEntity<?> listTables(@RequestParam(required = false) UUID restaurantId,
+                                        @RequestParam(required = false) String t) {
+        List<RestaurantTable> source;
+
+        if (restaurantId != null) {
+            source = tableRepository.findByRestaurantIdOrderByLabel(restaurantId);
+        } else if (t != null && !t.isBlank()) {
+            RestaurantTable ref = tableRepository.findByQrToken(t)
+                    .or(() -> tableRepository.findByLabelIgnoreCase(t))
+                    .orElse(null);
+            if (ref == null) return ResponseEntity.ok(List.of());
+            source = tableRepository.findByRestaurantIdOrderByLabel(ref.getRestaurant().getId());
+        } else {
+            source = tableRepository.findAllByOrderByLabel();
+        }
+
+        List<Map<String, Object>> tables = source.stream()
+                .map(tb -> {
                     Map<String, Object> map = new java.util.LinkedHashMap<>();
-                    map.put("id",           t.getId().toString());
-                    map.put("label",        t.getLabel());
-                    map.put("qrToken",      t.getQrToken() != null ? t.getQrToken() : "");
-                    map.put("status",       t.getStatus().name());
-                    map.put("capacity",     t.getCapacity());
-                    map.put("restaurantId", t.getRestaurant().getId().toString());
+                    map.put("id",           tb.getId().toString());
+                    map.put("label",        tb.getLabel());
+                    map.put("qrToken",      tb.getQrToken() != null ? tb.getQrToken() : "");
+                    map.put("status",       tb.getStatus().name());
+                    map.put("capacity",     tb.getCapacity());
+                    map.put("restaurantId", tb.getRestaurant().getId().toString());
                     return map;
                 })
                 .toList();
@@ -103,16 +128,14 @@ public class PublicMenuController {
     @PostMapping("/orders")
     @Transactional
     public ResponseEntity<?> placeOrder(@Valid @RequestBody CreateOrderDto dto) {
-        RestaurantTable table;
-        if (dto.tableToken() != null && !dto.tableToken().isBlank()) {
-            table = tableRepository.findByIdAndQrToken(dto.tableId(), dto.tableToken())
-                    .or(() -> tableRepository.findById(dto.tableId())
-                            .filter(t -> dto.tableToken().equalsIgnoreCase(t.getLabel())))
-                    .orElseThrow(() -> new IllegalArgumentException("Table introuvable ou token invalide"));
-        } else {
-            table = tableRepository.findById(dto.tableId())
-                    .orElseThrow(() -> new IllegalArgumentException("Table introuvable"));
+        if (dto.tableToken() == null || dto.tableToken().isBlank()) {
+            throw new IllegalArgumentException("Token de table requis");
         }
+
+        RestaurantTable table = tableRepository.findByIdAndQrToken(dto.tableId(), dto.tableToken())
+                .or(() -> tableRepository.findById(dto.tableId())
+                        .filter(t -> dto.tableToken().equalsIgnoreCase(t.getLabel())))
+                .orElseThrow(() -> new IllegalArgumentException("Table introuvable ou token invalide"));
 
         Order order = orderService.createOrder(table.getRestaurant().getId(), dto);
 
@@ -124,18 +147,29 @@ public class PublicMenuController {
         return ResponseEntity.status(201).body(resp);
     }
 
-    /** Marque une table comme propre (DIRTY → FREE) depuis l'app mobile. */
+    /**
+     * Marque une table comme propre (DIRTY → FREE) depuis l'app mobile.
+     * Le paramètre {@code t} (QR token ou libellé) valide que l'appelant est
+     * physiquement présent à cette table — empêche tout IDOR sur tableId.
+     */
     @PatchMapping("/tables/{tableId}/clean")
     @org.springframework.transaction.annotation.Transactional
-    public ResponseEntity<Void> markTableClean(@PathVariable UUID tableId) {
+    public ResponseEntity<Void> markTableClean(@PathVariable UUID tableId,
+                                               @RequestParam String t) {
+        // Valide que le token appartient bien à cette table
+        RestaurantTable table = tableRepository.findByIdAndQrToken(tableId, t)
+                .or(() -> tableRepository.findById(tableId)
+                        .filter(tb -> t.equalsIgnoreCase(tb.getLabel())))
+                .orElseThrow(() -> new IllegalArgumentException("Table introuvable ou token invalide"));
+
         orderService.finalizeTableOrders(tableId);
-        tableRepository.findById(tableId).ifPresent(table -> {
-            table.setStatus(RestaurantTable.TableStatus.FREE);
-            tableRepository.save(table);
-            UUID restaurantId = table.getRestaurant().getId();
-            eventPublisher.notifyTables(restaurantId,
-                    OrderEventDto.tableStatusChanged(restaurantId, table.getId(), table.getLabel(), "FREE"));
-        });
+
+        table.setStatus(RestaurantTable.TableStatus.FREE);
+        tableRepository.save(table);
+        UUID restaurantId = table.getRestaurant().getId();
+        eventPublisher.notifyTables(restaurantId,
+                OrderEventDto.tableStatusChanged(restaurantId, table.getId(), table.getLabel(), "FREE"));
+
         return ResponseEntity.noContent().build();
     }
 
@@ -206,8 +240,8 @@ public class PublicMenuController {
             @RequestParam String t,
             @RequestParam("file") MultipartFile file) throws IOException {
 
-        // Validate table token exists
-        tableRepository.findByQrToken(t)
+        // Validate table token and resolve its restaurant
+        RestaurantTable tableRef = tableRepository.findByQrToken(t)
                 .or(() -> tableRepository.findByLabelIgnoreCase(t))
                 .orElseThrow(() -> new IllegalArgumentException("Token invalide"));
 
@@ -219,15 +253,27 @@ public class PublicMenuController {
         com.orderandpay.entity.Product product = productRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Produit introuvable"));
 
-        String originalName = file.getOriginalFilename();
-        String ext = (originalName != null && originalName.contains("."))
-                ? originalName.substring(originalName.lastIndexOf('.'))
-                : ".jpg";
-        String filename = java.util.UUID.randomUUID() + ext;
+        // Validate product belongs to the same restaurant as the table token (prevents cross-tenant IDOR)
+        if (!product.getRestaurant().getId().equals(tableRef.getRestaurant().getId())) {
+            return ResponseEntity.status(403).build();
+        }
+
+        // Toujours sauvegarder en JPEG pour uniformiser et réduire le poids
+        String filename = UUID.randomUUID() + ".jpg";
 
         Path uploadDir = Paths.get(uploadsPath, "images");
         Files.createDirectories(uploadDir);
-        Files.copy(file.getInputStream(), uploadDir.resolve(filename), StandardCopyOption.REPLACE_EXISTING);
+
+        // Redimensionne à max 1200px (largeur ou hauteur), qualité 85%
+        // Si l'image est déjà petite elle n'est pas agrandie (keepAspectRatio + .asIs())
+        try (InputStream in = file.getInputStream()) {
+            Thumbnails.of(in)
+                    .size(1200, 1200)
+                    .keepAspectRatio(true)
+                    .outputFormat("jpg")
+                    .outputQuality(0.85)
+                    .toFile(uploadDir.resolve(filename).toFile());
+        }
 
         String imageUrl = "/api/uploads/images/" + filename;
         product.setImageUrl(imageUrl);
@@ -238,12 +284,27 @@ public class PublicMenuController {
         return ResponseEntity.ok(resp);
     }
 
-    /** Annulation d'une commande par le client (uniquement si CONFIRMED — pas encore en cuisine). */
+    /**
+     * Annulation d'une commande par le client (uniquement si CONFIRMED — pas encore en cuisine).
+     * Le paramètre {@code t} (QR token ou libellé) valide que l'appelant est bien
+     * à la table concernée — empêche l'annulation de commandes d'un autre restaurant.
+     */
     @DeleteMapping("/orders/{orderId}")
     @org.springframework.transaction.annotation.Transactional
-    public ResponseEntity<?> cancelOrder(@PathVariable UUID orderId) {
+    public ResponseEntity<?> cancelOrder(@PathVariable UUID orderId,
+                                         @RequestParam String t) {
+        // Valide le token et résout le restaurant
+        RestaurantTable tableRef = tableRepository.findByQrToken(t)
+                .or(() -> tableRepository.findByLabelIgnoreCase(t))
+                .orElseThrow(() -> new IllegalArgumentException("Token invalide"));
+
         Order order = orderRepository.findWithLinesById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Commande introuvable"));
+
+        // Vérifie que la commande appartient au même restaurant que le token
+        if (!order.getRestaurant().getId().equals(tableRef.getRestaurant().getId())) {
+            return ResponseEntity.status(403).build();
+        }
 
         if (order.getStatus() == Order.OrderStatus.DELIVERED
                 || order.getStatus() == Order.OrderStatus.PAID
@@ -252,7 +313,11 @@ public class PublicMenuController {
                     .body(Map.of("error", "Impossible d'annuler une commande en statut " + order.getStatus()));
         }
 
-        orderService.cancelOrder(order.getRestaurant().getId(), orderId);
+        UUID restaurantId = order.getRestaurant().getId();
+        auditService.log(restaurantId, "client@" + tableRef.getLabel(),
+                "ORDER_CANCELLED", orderId,
+                "{\"table\":\"" + tableRef.getLabel() + "\",\"via\":\"mobile\"}");
+        orderService.cancelOrder(restaurantId, orderId);
         return ResponseEntity.noContent().build();
     }
 

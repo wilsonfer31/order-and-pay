@@ -27,16 +27,24 @@ services:
     ports:
       - "8090:8080"
     environment:
-      DB_USER:        orderandpay
-      DB_PASSWORD:    orderandpay
-      JWT_SECRET:     change-me-in-production-256-bit-secret
-      FRONTEND_URL:   http://localhost:4200
+      DB_USER:        ${DB_USER:-orderandpay}
+      DB_PASSWORD:    ${DB_PASSWORD:-orderandpay}
+      # En local : valeur par défaut utilisée si JWT_SECRET absent du .env
+      # En prod   : toujours définir JWT_SECRET dans le .env (openssl rand -base64 32)
+      JWT_SECRET:     ${JWT_SECRET:-local-dev-only-secret-not-for-production-use}
+      FRONTEND_URL:   ${FRONTEND_URL:-http://localhost:4200}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/orderandpay
     volumes:
       - uploads_data:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
   admin-web:
     build:

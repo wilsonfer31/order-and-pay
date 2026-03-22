@@ -2,13 +2,39 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Fichiers de référence du projet
+
+| Fichier | Contenu |
+|---------|---------|
+| **`PROD_CHECKLIST.md`** | Points bloquants et importants avant mise en prod (sécurité, fiabilité, infra) |
+| **`FEATURES_BACKLOG.md`** | Backlog des fonctionnalités à implémenter (observabilité, features métier, UX, DevOps) |
+
+## Déploiement production (HTTPS)
+
+Config de prod séparée du dev :
+- `docker-compose.prod.yml` — stack complète sans ports exposés + nginx proxy + certbot
+- `nginx/app.conf.template` — config nginx générée par `init-letsencrypt.sh`
+- `.env.example` → copier en `.env` et remplir avant déploiement
+- `init-letsencrypt.sh` — à exécuter une seule fois sur le serveur pour obtenir les certificats
+
+```bash
+cp .env.example .env        # remplir DOMAIN, EMAIL, DB_PASSWORD, JWT_SECRET
+chmod +x init-letsencrypt.sh
+./init-letsencrypt.sh       # obtient les certs + démarre nginx
+docker-compose -f docker-compose.prod.yml up -d  # démarre tout
+```
+
+URLs de prod :
+- Admin web  : `https://DOMAIN`
+- Mobile app : `https://app.DOMAIN`
+
 ## Project Overview
 
 **Order & Pay** is a multi-tenant restaurant ordering and payment platform. Customers scan a QR code at their table, browse the menu, and place orders that kitchen/staff track in real time.
 
 The repo is a monorepo with three sub-applications:
-- `mobile-app/` — Ionic 7 + Angular 17 PWA (customer-facing, QR scan → menu → order → tracking)
-- `admin-web/` — Angular 17 + Angular Material admin dashboard (menu CMS, orders, floor editor, analytics)
+- `mobile-app/` — Ionic 7 + Angular 17 PWA utilisée par les **serveurs/waiter** (pas les clients finaux). Permet de sélectionner une table, parcourir le menu, passer des commandes et suivre leur statut en cuisine.
+- `admin-web/` — Angular 17 + Angular Material admin dashboard (menu CMS, orders, floor editor, analytics, caisse)
 - `backend/` — Spring Boot 3.2 + Java 21 REST API with WebSocket (STOMP)
 
 Database: PostgreSQL 16, managed by Flyway migrations.
@@ -41,7 +67,7 @@ npm run build      # production build
 npm install
 npm start          # ng serve --proxy-config proxy.conf.json
 npm run build      # production build
-npm test           # unit tests (Karma)
+npm test           # unit tests (Jest)
 npm run lint       # ESLint
 ```
 The proxy config forwards `/api/**` to `http://localhost:8090` in dev.

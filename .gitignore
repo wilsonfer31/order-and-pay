@@ -1,0 +1,41 @@
+# ── Claude Code (fichiers internes, ne pas committer) ────────────────────────
+.claude/settings.local.json
+.claude/todos/
+.claude/cache/
+
+# ── Environnement ─────────────────────────────────────────────────────────────
+.env
+*.env.local
+
+# ── Certificats et secrets ────────────────────────────────────────────────────
+certbot/
+nginx/dozzle/.htpasswd
+
+# ── Docker volumes locaux ─────────────────────────────────────────────────────
+nginx/app.conf
+
+# ── Backend ───────────────────────────────────────────────────────────────────
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+
+# ── Frontend (node_modules et builds) ─────────────────────────────────────────
+node_modules/
+dist/
+.angular/
+mobile-app/node_modules/
+mobile-app/dist/
+mobile-app/.angular/
+admin-web/node_modules/
+admin-web/dist/
+admin-web/.angular/
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

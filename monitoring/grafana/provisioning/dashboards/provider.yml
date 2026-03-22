@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name:            order-and-pay
+    orgId:           1
+    folder:          Order & Pay
+    type:            file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards

@@ -250,7 +250,7 @@ export class TableOrdersPage implements OnInit, OnDestroy, ViewWillEnter {
 
   cancelOrder(order: TableOrder): void {
     if (!confirm('Annuler cette commande ?')) return;
-    this.http.delete(`/public/orders/${order.orderId}`).subscribe({
+    this.http.delete(`/public/orders/${order.orderId}`, { params: { t: this.tableToken() } }).subscribe({
       next: () => {
         this.orders.update(list => list.filter(o => o.orderId !== order.orderId));
       },

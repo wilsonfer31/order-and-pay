@@ -23,6 +23,7 @@ public class OrderService {
     private final TableRepository    tableRepository;
     private final ProductRepository  productRepository;
     private final OrderEventPublisher eventPublisher;
+    private final AuditService       auditService;
 
     @Transactional
     public Order createOrder(UUID restaurantId, CreateOrderDto dto) {
@@ -189,6 +190,12 @@ public class OrderService {
             eventPublisher.notifyFloor(restaurantId,
                     OrderEventDto.lineStatusChanged(restaurantId, orderId, lineId,
                             "Toute la commande", OrderLine.LineStatus.READY));
+            var readyEvent = OrderEventDto.orderStatusChanged(restaurantId, orderId,
+                    order.getTable() != null ? order.getTable().getId() : null,
+                    order.getTable() != null ? order.getTable().getLabel() : null,
+                    Order.OrderStatus.READY);
+            eventPublisher.notifyClient(orderId, readyEvent);
+            eventPublisher.notifyKitchen(restaurantId, readyEvent);
         }
 
         return line;
@@ -206,6 +213,9 @@ public class OrderService {
         }
 
         Order saved = orderRepository.save(order);
+
+        auditService.log(restaurantId, "ORDER_STATUS_CHANGED", orderId,
+                "{\"status\":\"" + newStatus + "\"}");
 
         // Table DIRTY seulement si TOUTES les commandes de la table sont terminées
         if (newStatus == Order.OrderStatus.DELIVERED && order.getTable() != null) {
@@ -231,6 +241,11 @@ public class OrderService {
 
     @Transactional
     public void finalizeTableOrders(UUID tableId) {
+        // Verrou pessimiste sur la ligne de table : sérialise les appels concurrents
+        // (double-tap, double-scan). Le second appel attend la fin du premier, puis
+        // trouve une liste vide et ne fait rien.
+        tableRepository.findByIdForUpdate(tableId);
+
         List<Order> activeOrders = orderRepository.findActiveOrdersByTableId(tableId)
                 .stream()
                 .filter(o -> o.getStatus() != Order.OrderStatus.DELIVERED
@@ -248,8 +263,15 @@ public class OrderService {
         }
     }
 
-    /** Passe la table en DIRTY uniquement si toutes ses commandes actives sont DELIVERED ou PAID. */
+    /**
+     * Passe la table en DIRTY uniquement si :
+     * - toutes ses commandes actives sont DELIVERED, PAID ou CANCELLED
+     * - ET la table est encore OCCUPIED (ne pas écraser FREE ou RESERVED)
+     */
     private void markTableDirtyIfAllOrdersComplete(UUID restaurantId, RestaurantTable table) {
+        if (table.getStatus() != RestaurantTable.TableStatus.OCCUPIED) {
+            return;
+        }
         boolean allDone = orderRepository.findActiveOrdersByTableId(table.getId())
                 .stream()
                 .allMatch(o -> o.getStatus() == Order.OrderStatus.DELIVERED
@@ -300,6 +322,8 @@ public class OrderService {
             markTableDirtyIfAllOrdersComplete(restaurantId, order.getTable());
         }
 
+        auditService.log(restaurantId, "ORDER_CANCELLED", orderId,
+                "{\"table\":\"" + (order.getTable() != null ? order.getTable().getLabel() : "") + "\"}");
         log.info("Commande {} annulée ({})", orderId, restaurantId);
         return saved;
     }

@@ -8,6 +8,7 @@ import com.orderandpay.security.TenantContext;
 import com.orderandpay.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -106,11 +107,15 @@ public class OrderController {
         return ResponseEntity.ok(resp);
     }
 
-    /** Historique de toutes les commandes (hors DRAFT), filtrables par plage de dates. */
     @GetMapping("/history")
-    public List<Map<String, Object>> history(
+    public Map<String, Object> history(
             @RequestParam(required = false) String from,
-            @RequestParam(required = false) String to) {
+            @RequestParam(required = false) String to,
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "50") int pageSize) {
+
+        // Clamp pageSize to prevent abuse
+        pageSize = Math.min(pageSize, 200);
 
         Instant fromInstant = (from != null && !from.isBlank())
                 ? LocalDate.parse(from).atStartOfDay(ZoneOffset.UTC).toInstant()
@@ -119,33 +124,49 @@ public class OrderController {
                 ? LocalDate.parse(to).plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant()
                 : Instant.now().plus(36500, java.time.temporal.ChronoUnit.DAYS);
 
-        return orderRepository.findHistory(TenantContext.getCurrentTenant(), fromInstant, toInstant)
-                .stream()
-                .map(o -> {
-                    var lines = o.getLines().stream()
-                            .filter(l -> l.getStatus() != OrderLine.LineStatus.CANCELLED)
-                            .map(l -> {
-                                java.util.LinkedHashMap<String, Object> lm = new java.util.LinkedHashMap<>();
-                                lm.put("productName", l.getProduct().getName());
-                                lm.put("quantity",    l.getQuantity());
-                                lm.put("unitPriceHt",  l.getUnitPriceHt());
-                                return lm;
-                            })
-                            .toList();
-                    java.util.LinkedHashMap<String, Object> om = new java.util.LinkedHashMap<>();
-                    om.put("orderId",      o.getId().toString());
-                    om.put("orderNumber",  o.getOrderNumber());
-                    om.put("tableLabel",   o.getTable() != null ? o.getTable().getLabel() : "—");
-                    om.put("status",       o.getStatus().name());
-                    om.put("source",       o.getSource() != null ? o.getSource().name() : "CLIENT_APP");
-                    om.put("totalHt",      o.getTotalHt());
-                    om.put("totalTtc",     o.getTotalTtc());
-                    om.put("confirmedAt",  o.getConfirmedAt() != null ? o.getConfirmedAt().toString() : null);
-                    om.put("paidAt",       o.getPaidAt() != null ? o.getPaidAt().toString() : null);
-                    om.put("lines",        lines);
-                    return (Map<String, Object>) om;
-                })
-                .toList();
+        UUID restaurantId = TenantContext.getCurrentTenant();
+
+        long total = orderRepository.countHistory(restaurantId, fromInstant, toInstant);
+
+        List<UUID> ids = orderRepository.findHistoryIds(
+                restaurantId, fromInstant, toInstant,
+                PageRequest.of(page, pageSize));
+
+        List<Map<String, Object>> orders = ids.isEmpty()
+                ? List.of()
+                : orderRepository.findHistoryByIds(ids).stream()
+                        .map(o -> {
+                            var lines = o.getLines().stream()
+                                    .filter(l -> l.getStatus() != OrderLine.LineStatus.CANCELLED)
+                                    .map(l -> {
+                                        java.util.LinkedHashMap<String, Object> lm = new java.util.LinkedHashMap<>();
+                                        lm.put("productName", l.getProduct().getName());
+                                        lm.put("quantity",    l.getQuantity());
+                                        lm.put("unitPriceHt",  l.getUnitPriceHt());
+                                        return lm;
+                                    })
+                                    .toList();
+                            java.util.LinkedHashMap<String, Object> om = new java.util.LinkedHashMap<>();
+                            om.put("orderId",      o.getId().toString());
+                            om.put("orderNumber",  o.getOrderNumber());
+                            om.put("tableLabel",   o.getTable() != null ? o.getTable().getLabel() : "—");
+                            om.put("status",       o.getStatus().name());
+                            om.put("source",       o.getSource() != null ? o.getSource().name() : "CLIENT_APP");
+                            om.put("totalHt",      o.getTotalHt());
+                            om.put("totalTtc",     o.getTotalTtc());
+                            om.put("confirmedAt",  o.getConfirmedAt() != null ? o.getConfirmedAt().toString() : null);
+                            om.put("paidAt",       o.getPaidAt() != null ? o.getPaidAt().toString() : null);
+                            om.put("lines",        lines);
+                            return (Map<String, Object>) om;
+                        })
+                        .toList();
+
+        java.util.LinkedHashMap<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("orders",   orders);
+        result.put("total",    total);
+        result.put("page",     page);
+        result.put("pageSize", pageSize);
+        return result;
     }
 
     @DeleteMapping("/{id}")

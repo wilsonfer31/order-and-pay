@@ -26,29 +26,52 @@ spring:
     baseline-on-migrate: true
     validate-on-migrate: false
 
+spring.servlet.multipart:
+  max-file-size: 20MB
+  max-request-size: 20MB
+
 server:
   port: 8080
   servlet:
     context-path: /api
+  # Fait confiance aux headers X-Forwarded-* envoyés par le reverse proxy nginx
+  forward-headers-strategy: native
+  error:
+    # Ne jamais exposer stack traces, messages internes ou détails de validation
+    # dans les réponses d'erreur Spring par défaut (endpoint /error)
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
 
 app:
   uploads:
     path: ${UPLOADS_PATH:./uploads}
 
   jwt:
-    secret: ${JWT_SECRET:your-256-bit-secret-key-change-in-production-please}
+    secret: ${JWT_SECRET:local-dev-only-secret-not-for-production-use}
     expiration-ms: 86400000        # 24h
     refresh-expiration-ms: 604800000  # 7j
 
   cors:
-    allowed-origins:
-      - http://localhost:4200
-      - http://localhost:8100
-      - ${FRONTEND_URL:https://app.orderandpay.io}
+    allowed-origins: "http://localhost:4200,http://localhost:4201,http://localhost:8100,http://localhost:8101,${FRONTEND_URL:https://app.orderandpay.io}"
 
   websocket:
     endpoint: /ws
     allowed-origins: "*"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, prometheus
+  endpoint:
+    health:
+      show-details: never
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: order-and-pay
 
 logging:
   level:

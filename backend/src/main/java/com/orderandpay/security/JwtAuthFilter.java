@@ -1,10 +1,13 @@
 package com.orderandpay.security;
 
+import io.jsonwebtoken.ExpiredJwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -14,6 +17,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthFilter extends OncePerRequestFilter {
@@ -41,11 +45,29 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                             userDetails, null, userDetails.getAuthorities());
                     auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(req));
                     SecurityContextHolder.getContext().setAuthentication(auth);
+                    MDC.put("username", username);
                 }
             }
-        } catch (Exception ignored) {
-            // Token invalide ou expiré — on continue sans authentification
+            // Origine de la requête : admin-web, mobile-app ou API directe
+            String clientApp = req.getHeader("X-Client-App");
+            if (clientApp != null && !clientApp.isBlank()) {
+                MDC.put("clientApp", clientApp);
+            }
+        } catch (ExpiredJwtException e) {
+            // Token expiré — cas normal, l'utilisateur doit se reconnecter
+            log.debug("JWT expiré pour la requête {} {}", req.getMethod(), req.getRequestURI());
+        } catch (Exception e) {
+            // Signature invalide, token malformé, algorithme inattendu…
+            // Peut indiquer une tentative de falsification ou une mauvaise config.
+            log.warn("Erreur JWT inattendue sur {} {} — {} : {}",
+                    req.getMethod(), req.getRequestURI(),
+                    e.getClass().getSimpleName(), e.getMessage());
         }
-        chain.doFilter(req, res);
+        try {
+            chain.doFilter(req, res);
+        } finally {
+            MDC.remove("username");
+            MDC.remove("clientApp");
+        }
     }
 }

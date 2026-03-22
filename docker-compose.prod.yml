@@ -1,0 +1,130 @@
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: oap-postgres
+    environment:
+      POSTGRES_DB:       orderandpay
+      POSTGRES_USER:     ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Pas de port exposé en prod — accessible uniquement depuis le réseau interne
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oap-backend
+    environment:
+      DB_USER:               ${DB_USER}
+      DB_PASSWORD:           ${DB_PASSWORD}
+      JWT_SECRET:            ${JWT_SECRET}
+      FRONTEND_URL:          https://${DOMAIN}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/orderandpay
+      SPRING_PROFILES_ACTIVE: prod
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  admin-web:
+    build:
+      context: ./admin-web
+      dockerfile: Dockerfile
+    container_name: oap-admin
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  mobile-app:
+    build:
+      context: ./mobile-app
+      dockerfile: Dockerfile
+    container_name: oap-mobile
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: oap-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/app.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/dozzle/.htpasswd:/etc/nginx/dozzle/.htpasswd:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - admin-web
+      - mobile-app
+    # Recharge la config toutes les 6h pour prendre en compte le renouvellement des certs
+    command: >
+      /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot
+    container_name: oap-certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    # Renouvelle automatiquement les certificats toutes les 12h
+    entrypoint: >
+      /bin/sh -c "trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;"
+    restart: unless-stopped
+
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: oap-dozzle
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      DOZZLE_FILTER: "name=oap-"
+      DOZZLE_NO_ANALYTICS: "true"
+    # Port non exposé vers l'hôte — accessible uniquement via nginx (logs.${DOMAIN})
+    restart: unless-stopped
+
+  backup:
+    build:
+      context: ./backup
+      dockerfile: Dockerfile
+    container_name: oap-backup
+    environment:
+      PGHOST:     postgres
+      PGUSER:     ${DB_USER}
+      PGPASSWORD: ${DB_PASSWORD}
+      PGDATABASE: orderandpay
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-7}
+      # Optionnel — décommenter pour activer l'upload S3/Scaleway/R2
+      # S3_BUCKET:              ${S3_BUCKET}
+      # AWS_ACCESS_KEY_ID:      ${AWS_ACCESS_KEY_ID}
+      # AWS_SECRET_ACCESS_KEY:  ${AWS_SECRET_ACCESS_KEY}
+      # AWS_ENDPOINT_URL:       ${AWS_ENDPOINT_URL}   # vide pour AWS S3 standard
+    volumes:
+      - backup_data:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  uploads_data:
+  backup_data:

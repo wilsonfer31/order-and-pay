@@ -49,6 +49,7 @@ public class DashboardController {
             @RequestParam(defaultValue = "30") int days,
             @RequestParam(defaultValue = "Europe/Paris") String timezone) {
 
+        days = Math.min(Math.max(days, 1), 365);
         ZoneId zone = ZoneId.of(timezone);
         LocalDate today = LocalDate.now(zone);
         LocalDate start = today.minusDays(days - 1);

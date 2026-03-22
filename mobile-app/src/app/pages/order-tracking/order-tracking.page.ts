@@ -12,9 +12,9 @@ import {
 } from '@ionic/angular/standalone';
 import { addIcons }          from 'ionicons';
 import { checkmarkCircle, time, timeOutline, restaurant, bicycle, homeOutline, closeCircle, alertCircle } from 'ionicons/icons';
-import { RxStomp }           from '@stomp/rx-stomp';
+import { RxStomp, RxStompState } from '@stomp/rx-stomp';
 import { Subject, takeUntil } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { map, distinctUntilChanged } from 'rxjs/operators';
 
 export type OrderStatus = 'CONFIRMED' | 'IN_PROGRESS' | 'READY' | 'DELIVERED' | 'CANCELLED';
 
@@ -61,6 +61,17 @@ const STATUS_STEPS: OrderStatus[] = ['CONFIRMED', 'IN_PROGRESS', 'READY', 'DELIV
 </ion-header>
 
 <ion-content class="ion-padding">
+
+  @if (wsState() !== 'connected') {
+    <div class="ws-banner" [class.ws-banner--error]="wsState() === 'disconnected'">
+      <ion-icon name="alert-circle" style="font-size:18px;flex-shrink:0"></ion-icon>
+      @if (wsState() === 'reconnecting') {
+        Reconnexion en cours…
+      } @else {
+        Connexion perdue — les mises à jour en temps réel sont indisponibles.
+      }
+    </div>
+  }
 
   @if (order()?.status === 'CANCELLED') {
     <div class="cancelled-banner">
@@ -209,6 +220,25 @@ const STATUS_STEPS: OrderStatus[] = ['CONFIRMED', 'IN_PROGRESS', 'READY', 'DELIV
       strong { color: #F97316; font-size: 18px; }
     }
 
+    .ws-banner {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 10px 14px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+      background: #FEF3C7;
+      color: #92400E;
+      ion-icon { color: #D97706; }
+    }
+    .ws-banner--error {
+      background: #FEE2E2;
+      color: #991B1B;
+      ion-icon { color: #DC2626; }
+    }
+
     .cancelled-banner {
       display: flex;
       flex-direction: column;
@@ -231,7 +261,9 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
 
   order      = signal<OrderState | null>(null);
   loadError  = signal(false);
+  wsState    = signal<'connected' | 'reconnecting' | 'disconnected'>('reconnecting');
   steps      = STATUS_STEPS;
+  tableToken = signal('');
 
   stepIndex = () => {
     const o = this.order();
@@ -247,6 +279,8 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     const orderId = this.route.snapshot.queryParams['orderId'];
+    const t = this.route.snapshot.queryParams['t'] ?? '';
+    this.tableToken.set(t);
     if (!orderId) return;
 
     // Chargement initial de l'état depuis le backend
@@ -269,6 +303,19 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
       reconnectDelay: 5000,
     });
     this.stomp.activate();
+
+    // Track connection state for the visual indicator
+    this.stomp.connectionState$
+      .pipe(distinctUntilChanged(), takeUntil(this.destroy$))
+      .subscribe(state => {
+        if (state === RxStompState.OPEN) {
+          this.wsState.set('connected');
+        } else if (state === RxStompState.CLOSING || state === RxStompState.CLOSED) {
+          // CLOSED triggers a reconnect attempt — show 'reconnecting' not 'disconnected'
+          // unless stomp is explicitly deactivated (destroy path)
+          this.wsState.set('reconnecting');
+        }
+      });
 
     this.stomp
       .watch(`/topic/client/${orderId}`)
@@ -306,7 +353,7 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
     const orderId = this.order()?.orderId;
     if (!orderId || this.cancelInFlight()) return;
     this.cancelInFlight.set(true);
-    this.http.delete(`/public/orders/${orderId}`).subscribe({
+    this.http.delete(`/public/orders/${orderId}`, { params: { t: this.tableToken() } }).subscribe({
       next: () => {
         this.order.update(o => o ? { ...o, status: 'CANCELLED' } : o);
         this.stomp.deactivate();
@@ -365,6 +412,7 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.wsState.set('disconnected');
     this.destroy$.next();
     this.destroy$.complete();
     this.stomp.deactivate();

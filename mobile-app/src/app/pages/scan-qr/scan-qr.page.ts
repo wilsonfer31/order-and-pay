@@ -349,7 +349,8 @@ export class ScanQrPage implements OnInit, AfterViewInit, OnDestroy, ViewWillEnt
   }
 
   markClean(table: TableInfo): void {
-    this.http.patch(`/public/tables/${table.id}/clean`, null).subscribe({
+    const token = table.qrToken ?? table.label;
+    this.http.patch(`/public/tables/${table.id}/clean`, null, { params: { t: token } }).subscribe({
       next: () => this.tables.update(list =>
         list.map(t => t.id === table.id ? { ...t, status: 'FREE' } : t)
       )

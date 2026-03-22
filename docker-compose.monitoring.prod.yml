@@ -1,0 +1,100 @@
+
+# Stack de monitoring — order-and-pay PRODUCTION
+# Utilise la stack générique depuis ../monitoring-stack/
+#
+# Lancer TOUT (app + monitoring) :
+#   docker-compose -f docker-compose.prod.yml -f docker-compose.monitoring.prod.yml up -d
+#
+# Grafana → https://monitoring.DOMAIN  (admin / ${GRAFANA_PASSWORD})
+#
+# Différences vs dev :
+#   - Aucun port exposé vers l'hôte (tout passe par nginx)
+#   - Rétention données Prometheus : 90 jours
+
+services:
+
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: oap-loki
+    command: -config.file=/etc/loki/config.yml
+    volumes:
+      - ../monitoring-stack/monitoring/loki-config.yml:/etc/loki/config.yml:ro
+      - loki_data:/loki
+    # Pas de port exposé — accessible uniquement depuis le réseau interne
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3100/ready | grep -q ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: oap-promtail
+    command: -config.file=/etc/promtail/config.yml
+    environment:
+      COMPOSE_PROJECT: ${COMPOSE_PROJECT:-order-and-pay}
+    volumes:
+      - ../monitoring-stack/monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: oap-prometheus
+    command:
+      - --config.file=/etc/prometheus/config.yml
+      - --storage.tsdb.retention.time=90d
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ./monitoring/prometheus-config.yml:/etc/prometheus/config.yml:ro
+      - prometheus_data:/prometheus
+    # Pas de port exposé vers l'hôte
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: oap-cadvisor
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    # Pas de port exposé vers l'hôte
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.0
+    container_name: oap-node-exporter
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /:/host:ro
+    # Pas de port exposé vers l'hôte
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: oap-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP:     "false"
+      GF_SERVER_ROOT_URL:         https://monitoring.${DOMAIN}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../monitoring-stack/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+    # Pas de port exposé vers l'hôte — accessible via nginx (monitoring.DOMAIN)
+    restart: unless-stopped
+
+volumes:
+  loki_data:
+  prometheus_data:
+  grafana_data:

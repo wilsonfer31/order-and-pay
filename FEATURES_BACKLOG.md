@@ -49,11 +49,8 @@ Le statut `RESERVED` existe sur les tables mais aucun système de réservation.
 - Blocage automatique de la table à l'heure prévue
 - Vue calendrier dans l'admin
 
-### Gestion du personnel (utilisateurs) **[SCHEMA]**
-Les utilisateurs et rôles sont dans la base mais aucun CRUD admin n'existe.
-- Page "Équipe" dans l'admin : créer / modifier / désactiver un compte employé
-- Attribution des rôles (OWNER, MANAGER, WAITER, KITCHEN, CASHIER)
-- Réinitialisation de mot de passe par l'OWNER
+### ~~Gestion du personnel (utilisateurs)~~ ✅ **[SCHEMA]**
+Page "Équipe" dans l'admin : CRUD complet (créer / modifier / désactiver / supprimer). Attribution des rôles (OWNER, MANAGER, WAITER, KITCHEN, CASHIER) avec aperçu des pages accessibles par rôle. Sidebar filtrée dynamiquement selon le rôle de l'utilisateur connecté. Fix 401 pour les rôles non-OWNER (`BadCredentialsException` → handler dédié dans `GlobalExceptionHandler`).
 
 ### Paramètres du restaurant **[SCHEMA]**
 Champs `siret`, `tva_intra`, `logo_url`, `address`, `phone`, `email` présents mais non éditables.

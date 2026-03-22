@@ -3,6 +3,9 @@ package com.orderandpay.controller;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -12,6 +15,14 @@ import java.util.Map;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler({ BadCredentialsException.class, DisabledException.class, LockedException.class })
+    public ResponseEntity<Map<String, String>> handleAuthError(RuntimeException ex) {
+        String message = ex instanceof DisabledException  ? "Compte désactivé."
+                       : ex instanceof LockedException    ? "Compte verrouillé."
+                       : "Email ou mot de passe incorrect.";
+        return ResponseEntity.status(401).body(Map.of("message", message));
+    }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException ex) {

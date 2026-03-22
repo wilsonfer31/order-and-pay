@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, computed } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } from '@angular/router';
 // NavigationEnd also imported below as NavEnd to avoid type narrowing issues
 import { CommonModule }      from '@angular/common';
@@ -9,6 +9,7 @@ import { filter, map }       from 'rxjs/operators';
 import { toSignal }          from '@angular/core/rxjs-interop';
 import { NavigationEnd as NavEnd } from '@angular/router';
 import { AuthService }       from './core/services/auth.service';
+import { ALL_PAGES, ROLE_PAGES, NavPage } from './core/role-permissions';
 
 @Component({
   selector: 'app-root',
@@ -35,42 +36,15 @@ import { AuthService }       from './core/services/auth.service';
       </div>
 
       <ul class="sidebar__nav">
-        <li>
-          <a routerLink="/dashboard" routerLinkActive="active" class="nav-item" matTooltip="Dashboard" matTooltipPosition="right" [matTooltipDisabled]="!collapsed()">
-            <mat-icon>dashboard</mat-icon>
-            <span class="nav-label">Dashboard</span>
-          </a>
-        </li>
-        <li>
-          <a routerLink="/menu" routerLinkActive="active" class="nav-item" matTooltip="Menu" matTooltipPosition="right" [matTooltipDisabled]="!collapsed()">
-            <mat-icon>menu_book</mat-icon>
-            <span class="nav-label">Menu</span>
-          </a>
-        </li>
-        <li>
-          <a routerLink="/floor/default" routerLinkActive="active" class="nav-item" matTooltip="Plan de salle" matTooltipPosition="right" [matTooltipDisabled]="!collapsed()">
-            <mat-icon>table_restaurant</mat-icon>
-            <span class="nav-label">Plan de salle</span>
-          </a>
-        </li>
-        <li>
-          <a routerLink="/kitchen" routerLinkActive="active" class="nav-item" matTooltip="Cuisine" matTooltipPosition="right" [matTooltipDisabled]="!collapsed()">
-            <mat-icon>soup_kitchen</mat-icon>
-            <span class="nav-label">Cuisine</span>
-          </a>
-        </li>
-        <li>
-          <a routerLink="/orders" routerLinkActive="active" class="nav-item" matTooltip="Historique" matTooltipPosition="right" [matTooltipDisabled]="!collapsed()">
-            <mat-icon>receipt_long</mat-icon>
-            <span class="nav-label">Historique</span>
-          </a>
-        </li>
-        <li>
-          <a routerLink="/staff" routerLinkActive="active" class="nav-item" matTooltip="Équipe" matTooltipPosition="right" [matTooltipDisabled]="!collapsed()">
-            <mat-icon>people</mat-icon>
-            <span class="nav-label">Équipe</span>
-          </a>
-        </li>
+        @for (page of visiblePages(); track page.route) {
+          <li>
+            <a [routerLink]="page.route" routerLinkActive="active" class="nav-item"
+               [matTooltip]="page.label" matTooltipPosition="right" [matTooltipDisabled]="!collapsed()">
+              <mat-icon>{{ page.icon }}</mat-icon>
+              <span class="nav-label">{{ page.label }}</span>
+            </a>
+          </li>
+        }
       </ul>
 
       <div class="sidebar__footer">
@@ -250,6 +224,12 @@ import { AuthService }       from './core/services/auth.service';
 export class AppComponent {
   readonly auth = inject(AuthService);
   private router = inject(Router);
+
+  readonly visiblePages = computed(() => {
+    const role    = this.auth.getRole();
+    const allowed = ROLE_PAGES[role] ?? [];
+    return ALL_PAGES.filter(p => allowed.includes(p.route));
+  });
 
   /** Affiche le shell (sidebar + header) uniquement hors de la page login */
   readonly showShell = toSignal(

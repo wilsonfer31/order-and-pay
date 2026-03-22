@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, computed, inject } from '@angular/core';
+import { Component, OnInit, signal, computed, inject, effect } from '@angular/core';
 import { CommonModule }          from '@angular/common';
 import { HttpClient }            from '@angular/common/http';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
@@ -11,6 +11,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule }      from '@angular/material/tooltip';
 import { MatDialog }             from '@angular/material/dialog';
 import { ConfirmDialogComponent } from '../../shared/confirm-dialog/confirm-dialog.component';
+import { getPagesForRole, NavPage } from '../../core/role-permissions';
 
 interface StaffMember {
   id:          string;
@@ -173,6 +174,21 @@ const ROLE_COLORS: Record<string, string> = {
             }
           </mat-form-field>
 
+          <!-- Accès accordés selon le rôle -->
+          @if (roleAccess().length > 0) {
+            <div class="access-preview">
+              <span class="access-preview__label">Accès accordés</span>
+              <div class="access-preview__chips">
+                @for (page of roleAccess(); track page.route) {
+                  <span class="access-chip">
+                    <mat-icon>{{ page.icon }}</mat-icon>
+                    {{ page.label }}
+                  </span>
+                }
+              </div>
+            </div>
+          }
+
           <div class="panel__actions">
             <button mat-button type="button" (click)="closePanel()">Annuler</button>
             <button mat-flat-button color="primary" type="submit" [disabled]="saving()">
@@ -248,6 +264,12 @@ const ROLE_COLORS: Record<string, string> = {
     .empty-state mat-icon { font-size: 40px; width: 40px; height: 40px; }
     .empty-state p { margin: 0; font-size: 14px; }
 
+    .access-preview { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px; margin: 4px 0; }
+    .access-preview__label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #16a34a; display: block; margin-bottom: 8px; }
+    .access-preview__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .access-chip { display: inline-flex; align-items: center; gap: 4px; background: #fff; border: 1px solid #bbf7d0; border-radius: 99px; padding: 3px 10px; font-size: 12px; font-weight: 500; color: #166534; }
+    .access-chip mat-icon { font-size: 14px; width: 14px; height: 14px; }
+
     .spin { animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
   `]
@@ -259,12 +281,15 @@ export class StaffComponent implements OnInit {
   private dialog = inject(MatDialog);
   private fb     = inject(FormBuilder);
 
-  staff   = signal<StaffMember[]>([]);
-  loading = signal(true);
-  saving  = signal(false);
-  error   = signal<string | null>(null);
-  editing = signal<StaffMember | null>(null);
+  staff     = signal<StaffMember[]>([]);
+  loading   = signal(true);
+  saving    = signal(false);
+  error     = signal<string | null>(null);
+  editing   = signal<StaffMember | null>(null);
   panelOpen = signal(false);
+  selectedRole = signal<string>('WAITER');
+
+  readonly roleAccess = computed<NavPage[]>(() => getPagesForRole(this.selectedRole()));
 
   readonly roles = [
     { value: 'OWNER',   label: 'Propriétaire' },
@@ -284,6 +309,9 @@ export class StaffComponent implements OnInit {
 
   ngOnInit(): void {
     this.load();
+    this.form.get('role')!.valueChanges.subscribe(r => {
+      if (r) this.selectedRole.set(r);
+    });
   }
 
   private load(): void {
@@ -297,6 +325,7 @@ export class StaffComponent implements OnInit {
   openNew(): void {
     this.editing.set(null);
     this.form.reset({ role: 'WAITER' });
+    this.selectedRole.set('WAITER');
     this.form.get('email')!.enable();
     this.form.get('password')!.setValidators([Validators.required, Validators.minLength(8)]);
     this.form.get('password')!.updateValueAndValidity();
@@ -313,6 +342,7 @@ export class StaffComponent implements OnInit {
       role:      m.role,
       password:  '',
     });
+    this.selectedRole.set(m.role);
     this.form.get('email')!.disable();
     this.form.get('password')!.setValidators([Validators.minLength(8)]);
     this.form.get('password')!.updateValueAndValidity();

@@ -115,11 +115,26 @@ Each table has a `session_started_at` timestamp (added in `V3__add_table_session
 ### Public (unauthenticated) endpoints
 `PublicMenuController` serves the menu, handles order placement, and manages table status for the mobile app. The mobile app does not require login. Orders are placed via `POST /public/orders`.
 
+### Product options (tailles, cuissons, suppléments)
+Each product can have multiple `ProductOption` groups (e.g. "Viande", "Cuisson"), each with `ProductOptionValue` entries. Options are optional or required, with a configurable `maxChoices`.
+
+- **Menu API** (`GET /public/menu`) includes a full `options` array per product (id, name, required, maxChoices, values).
+- **Mobile modal** (`option-picker.modal.ts`) — sheet modal with sticky confirm button inside `ion-content` (NOT `ion-footer` which is invisible in sheet modals with breakpoints).
+- **UUID stability** — `ProductController.applyOptions()` updates option/value entities in-place when their UUIDs are provided. The admin-web always sends existing IDs back on save so UUIDs are never regenerated. Do NOT clear-and-recreate options — this breaks in-flight cart sessions.
+- **Order snapshot** — selected option values are stored in `order_line_options` with `label` and `option_name` snapshots at order time. The `option_name` field (added in V8) allows displaying "Viande : Bleu" without joining back to the product catalogue.
+- **Kitchen view** — `GET /orders` includes `options: ["Viande : Bleu"]` per line. Displayed in orange under the product name on each ticket.
+
 ### Database migrations
 Flyway runs on startup. Migration files in `backend/src/main/resources/db/migration/`:
 - `V1__init_schema.sql` — full schema (UUID PKs, indexes, 13+ tables)
 - `V2__seed_demo.sql` — demo restaurant, users, and menu data
 - `V3__add_table_session.sql` — adds `session_started_at` column to `tables`
+- `V4__add_indexes.sql` — performance indexes
+- `V5__add_audit_log.sql` — audit_log table
+- `V6__randomize_demo_qr_tokens.sql` — randomise demo QR tokens
+- `V7__order_line_options_drop_fk.sql` — removes FK constraint on order_line_options for historical snapshots
+- `V8__order_line_option_name.sql` — adds `option_name` column to `order_line_options`
+- `V9__backfill_option_name.sql` — backfills `option_name` for existing orders via join on `product_option_values`
 
 ### Tax calculations
 French TVA rates (5.5%, 10%, 20%) are computed in `TaxService.java` and applied per `OrderLine`.
@@ -127,10 +142,10 @@ French TVA rates (5.5%, 10%, 20%) are computed in `TaxService.java` and applied 
 ## Admin Web Features
 
 - **Dashboard** (`/`) — KPI cards (CA TTC, panier moyen, marge brute, TVA), bar chart (30-day revenue), table status grid, real-time activity feed with expandable ORDER_CREATED details
-- **Kitchen** (`/kitchen`) — live order queue with STOMP updates
+- **Kitchen** (`/kitchen`) — live order queue with STOMP updates; affiche les options choisies ("Viande : Bleu") en orange sous chaque ticket
 - **Floor editor** (`/floor`) — drag-and-drop table layout
 - **Orders history** (`/orders`) — date-range filter, expandable order list, KPI summary
-- **Menu CMS** (`/menu`) — product and category management
+- **Menu CMS** (`/menu`) — product and category management with options editor (groupes + valeurs, UUIDs préservés)
 - **Sidebar** — collapsible to icon-rail (state persisted in localStorage)
 
 ## Key Patterns

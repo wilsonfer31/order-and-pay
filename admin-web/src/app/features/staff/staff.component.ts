@@ -42,7 +42,6 @@ const ROLE_COLORS: Record<string, string> = {
 @Component({
   selector: 'app-staff',
   standalone: true,
-  changeDetection: /* ChangeDetectionStrategy.OnPush — disabled to allow form reactivity */ undefined,
   imports: [
     CommonModule, ReactiveFormsModule,
     MatButtonModule, MatIconModule, MatFormFieldModule,
@@ -193,192 +192,61 @@ const ROLE_COLORS: Record<string, string> = {
 </div>
   `,
   styles: [`
-    .staff-page {
-      padding: 32px;
-      max-width: 1100px;
-      margin: 0 auto;
-    }
+    .staff-page { padding: 32px; max-width: 1100px; margin: 0 auto; }
 
-    .page-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 24px;
+    .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+    .page-header__left { display: flex; align-items: center; gap: 10px; }
+    .page-header__left mat-icon { color: #2563eb; font-size: 28px; width: 28px; height: 28px; }
+    .page-header__left h1 { margin: 0; font-size: 22px; font-weight: 700; color: #111827; }
 
-      &__left {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        mat-icon { color: #2563eb; font-size: 28px; width: 28px; height: 28px; }
-        h1 { margin: 0; font-size: 22px; font-weight: 700; color: #111827; }
-      }
-    }
+    .count-badge { background: #eff6ff; color: #2563eb; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
 
-    .count-badge {
-      background: #eff6ff;
-      color: #2563eb;
-      font-size: 12px;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 99px;
-    }
+    .layout { display: grid; grid-template-columns: 1fr; gap: 24px; }
+    .layout--with-panel { grid-template-columns: 1fr 360px; }
 
-    .layout {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 24px;
-
-      &--with-panel {
-        grid-template-columns: 1fr 360px;
-      }
-    }
-
-    /* ── Table ── */
-    .staff-table {
-      background: #fff;
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      overflow: hidden;
-
-      &__header {
-        display: grid;
-        grid-template-columns: 2fr 1fr 1fr 1.5fr 80px;
-        padding: 10px 16px;
-        background: #f9fafb;
-        border-bottom: 1px solid #e5e7eb;
-        font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: .05em;
-        color: #6b7280;
-      }
+    .staff-table { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
+    .staff-table__header {
+      display: grid; grid-template-columns: 2fr 1fr 1fr 1.5fr 80px;
+      padding: 10px 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb;
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #6b7280;
     }
 
     .staff-row {
-      display: grid;
-      grid-template-columns: 2fr 1fr 1fr 1.5fr 80px;
-      align-items: center;
-      padding: 12px 16px;
-      border-bottom: 1px solid #f3f4f6;
-      cursor: pointer;
-      transition: background .1s;
-
-      &:last-child { border-bottom: none; }
-      &:hover { background: #f9fafb; }
-      &--selected { background: #eff6ff !important; }
-      &--inactive { opacity: .55; }
-
-      &__identity {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-
-      &__name { font-weight: 600; font-size: 14px; color: #111827; }
-      &__email { font-size: 12px; color: #6b7280; }
-      &__login { font-size: 12px; color: #6b7280; }
-
-      &__actions {
-        display: flex;
-        gap: 2px;
-        justify-content: flex-end;
-      }
+      display: grid; grid-template-columns: 2fr 1fr 1fr 1.5fr 80px;
+      align-items: center; padding: 12px 16px;
+      border-bottom: 1px solid #f3f4f6; cursor: pointer; transition: background .1s;
     }
+    .staff-row:last-child { border-bottom: none; }
+    .staff-row:hover { background: #f9fafb; }
+    .staff-row--selected { background: #eff6ff !important; }
+    .staff-row--inactive { opacity: .55; }
+    .staff-row__identity { display: flex; align-items: center; gap: 10px; }
+    .staff-row__name { font-weight: 600; font-size: 14px; color: #111827; }
+    .staff-row__email { font-size: 12px; color: #6b7280; }
+    .staff-row__login { font-size: 12px; color: #6b7280; }
+    .staff-row__actions { display: flex; gap: 2px; justify-content: flex-end; }
 
-    .avatar {
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 13px;
-      font-weight: 700;
-      color: white;
-      flex-shrink: 0;
-    }
+    .avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: white; flex-shrink: 0; }
 
-    .role-badge {
-      font-size: 11px;
-      font-weight: 600;
-      padding: 3px 8px;
-      border-radius: 99px;
-      white-space: nowrap;
-    }
+    .role-badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 99px; white-space: nowrap; }
 
-    .status-badge {
-      font-size: 11px;
-      font-weight: 600;
-      padding: 3px 8px;
-      border-radius: 99px;
+    .status-badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 99px; }
+    .status-badge--active   { background: #dcfce7; color: #16a34a; }
+    .status-badge--inactive { background: #f3f4f6; color: #6b7280; }
 
-      &--active   { background: #dcfce7; color: #16a34a; }
-      &--inactive { background: #f3f4f6; color: #6b7280; }
-    }
+    .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; height: fit-content; }
+    .panel__header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #e5e7eb; }
+    .panel__header h2 { margin: 0; font-size: 16px; font-weight: 700; color: #111827; }
+    .panel__form { padding: 20px; display: flex; flex-direction: column; gap: 4px; }
+    .panel__form mat-form-field { width: 100%; }
+    .panel__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 
-    /* ── Panel ── */
-    .panel {
-      background: #fff;
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      overflow: hidden;
-      height: fit-content;
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .form-error { color: #dc2626; font-size: 13px; margin: 0; text-align: center; }
 
-      &__header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 16px 20px;
-        border-bottom: 1px solid #e5e7eb;
-
-        h2 { margin: 0; font-size: 16px; font-weight: 700; color: #111827; }
-      }
-
-      &__form {
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-
-        mat-form-field { width: 100%; }
-      }
-
-      &__actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
-        margin-top: 8px;
-      }
-    }
-
-    .form-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-
-    .form-error {
-      color: #dc2626;
-      font-size: 13px;
-      margin: 0;
-      text-align: center;
-    }
-
-    /* ── États vides ── */
-    .empty-state {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 8px;
-      padding: 48px;
-      color: #9ca3af;
-      background: #fff;
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-
-      mat-icon { font-size: 40px; width: 40px; height: 40px; }
-      p { margin: 0; font-size: 14px; }
-    }
+    .empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 48px; color: #9ca3af; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; }
+    .empty-state mat-icon { font-size: 40px; width: 40px; height: 40px; }
+    .empty-state p { margin: 0; font-size: 14px; }
 
     .spin { animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }

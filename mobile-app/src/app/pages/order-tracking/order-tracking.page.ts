@@ -8,7 +8,7 @@ import { HttpClient }        from '@angular/common/http';
 import {
   IonContent, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton,
   IonProgressBar, IonChip, IonLabel, IonCard, IonCardContent,
-  IonIcon, IonList, IonItem
+  IonIcon, IonList, IonItem, AlertController
 } from '@ionic/angular/standalone';
 import { addIcons }          from 'ionicons';
 import { checkmarkCircle, time, timeOutline, restaurant, bicycle, homeOutline, closeCircle, alertCircle } from 'ionicons/icons';
@@ -256,6 +256,7 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
   private route   = inject(ActivatedRoute);
   private router  = inject(Router);
   private http    = inject(HttpClient);
+  private alertCtrl = inject(AlertController);
   private destroy$ = new Subject<void>();
   private stomp   = new RxStomp();
 
@@ -348,8 +349,18 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
     }
   }
 
-  confirmCancel(): void {
-    if (!confirm('Annuler votre commande ? Cette action est irréversible.')) return;
+  async confirmCancel(): Promise<void> {
+    const alert = await this.alertCtrl.create({
+      header: 'Annuler la commande',
+      message: 'Cette action est irréversible. Voulez-vous vraiment annuler votre commande ?',
+      buttons: [
+        { text: 'Non', role: 'cancel' },
+        { text: 'Oui, annuler', role: 'confirm', cssClass: 'alert-button-danger' }
+      ]
+    });
+    await alert.present();
+    const { role } = await alert.onDidDismiss();
+    if (role !== 'confirm') return;
     const orderId = this.order()?.orderId;
     if (!orderId || this.cancelInFlight()) return;
     this.cancelInFlight.set(true);
@@ -361,7 +372,8 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
       },
       error: (err) => {
         const msg = err?.error?.error ?? 'Impossible d\'annuler cette commande.';
-        alert(msg);
+        this.alertCtrl.create({ header: 'Erreur', message: msg, buttons: ['OK'] })
+          .then(a => a.present());
         this.cancelInFlight.set(false);
       }
     });

@@ -5,8 +5,10 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatCardModule } from '@angular/material/card';
+import { MatDialog } from '@angular/material/dialog';
 import { WebSocketService } from '../../core/services/websocket.service';
 import { AuthService } from '../../core/services/auth.service';
+import { ConfirmDialogComponent } from '../../shared/confirm-dialog/confirm-dialog.component';
 import { Subject, takeUntil } from 'rxjs';
 
 interface KitchenLine {
@@ -299,6 +301,7 @@ interface KitchenTicket {
 })
 export class KitchenComponent implements OnInit, OnDestroy {
   private http    = inject(HttpClient);
+  private dialog  = inject(MatDialog);
   private ws      = inject(WebSocketService);
   private auth    = inject(AuthService);
   private ngZone  = inject(NgZone);
@@ -456,12 +459,21 @@ export class KitchenComponent implements OnInit, OnDestroy {
   serveTicket(ticket: KitchenTicket): void   { this.patchLineStatus(ticket, 'SERVED'); }
 
   cancelOrder(ticket: KitchenTicket): void {
-    if (!confirm(`Annuler la commande #${ticket.orderNumber ?? ''} table ${ticket.tableLabel} ?`)) return;
-    this.http.delete(`/orders/${ticket.orderId}`).subscribe({
-      next: () => {
-        this.orders.update(list => list.filter(o => o.orderId !== ticket.orderId));
-      },
-      error: () => {}
+    this.dialog.open(ConfirmDialogComponent, {
+      data: {
+        title: 'Annuler la commande',
+        message: `Annuler la commande #${ticket.orderNumber ?? ''} table ${ticket.tableLabel} ? Cette action est irréversible.`,
+        confirmLabel: 'Annuler la commande',
+        danger: true
+      }
+    }).afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
+      this.http.delete(`/orders/${ticket.orderId}`).subscribe({
+        next: () => {
+          this.orders.update(list => list.filter(o => o.orderId !== ticket.orderId));
+        },
+        error: () => {}
+      });
     });
   }
 

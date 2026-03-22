@@ -9,7 +9,8 @@ import { HttpClient }     from '@angular/common/http';
 import {
   IonContent, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
   IonCard, IonCardContent, IonCardHeader, IonCardTitle,
-  IonChip, IonLabel, IonIcon, IonSpinner, IonButton, IonRefresher, IonRefresherContent
+  IonChip, IonLabel, IonIcon, IonSpinner, IonButton, IonRefresher, IonRefresherContent,
+  AlertController
 } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
 import {
@@ -190,9 +191,10 @@ interface TableOrder {
   `]
 })
 export class TableOrdersPage implements OnInit, OnDestroy, ViewWillEnter {
-  private route   = inject(ActivatedRoute);
-  private router  = inject(Router);
-  private http    = inject(HttpClient);
+  private route     = inject(ActivatedRoute);
+  private router    = inject(Router);
+  private http      = inject(HttpClient);
+  private alertCtrl = inject(AlertController);
   private destroy$ = new Subject<void>();
   private stomp   = new RxStomp();
 
@@ -248,14 +250,28 @@ export class TableOrdersPage implements OnInit, OnDestroy, ViewWillEnter {
     }
   }
 
-  cancelOrder(order: TableOrder): void {
-    if (!confirm('Annuler cette commande ?')) return;
+  async cancelOrder(order: TableOrder): Promise<void> {
+    const alert = await this.alertCtrl.create({
+      header: 'Annuler la commande',
+      message: 'Voulez-vous vraiment annuler cette commande ?',
+      buttons: [
+        { text: 'Non', role: 'cancel' },
+        { text: 'Oui, annuler', role: 'confirm', cssClass: 'alert-button-danger' }
+      ]
+    });
+    await alert.present();
+    const { role } = await alert.onDidDismiss();
+    if (role !== 'confirm') return;
     this.http.delete(`/public/orders/${order.orderId}`, { params: { t: this.tableToken() } }).subscribe({
       next: () => {
         this.orders.update(list => list.filter(o => o.orderId !== order.orderId));
       },
       error: (err) => {
-        alert(err?.error?.error ?? 'Impossible d\'annuler cette commande.');
+        this.alertCtrl.create({
+          header: 'Erreur',
+          message: err?.error?.error ?? 'Impossible d\'annuler cette commande.',
+          buttons: ['OK']
+        }).then(a => a.present());
       }
     });
   }

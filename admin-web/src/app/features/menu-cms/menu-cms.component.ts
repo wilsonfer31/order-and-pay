@@ -11,6 +11,8 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatDialog } from '@angular/material/dialog';
+import { ConfirmDialogComponent } from '../../shared/confirm-dialog/confirm-dialog.component';
 
 interface Category {
   id: string;
@@ -566,6 +568,7 @@ export class MenuCmsComponent implements OnInit {
     private http:     HttpClient,
     private fb:       FormBuilder,
     private snack:    MatSnackBar,
+    private dialog:   MatDialog,
   ) {}
 
   ngOnInit(): void {
@@ -628,14 +631,23 @@ export class MenuCmsComponent implements OnInit {
   }
 
   deleteCategory(cat: Category): void {
-    if (!confirm(`Supprimer la catégorie « ${cat.name} » ?`)) return;
-    this.http.delete(`/categories/${cat.id}`).subscribe({
-      next: () => {
-        this.categories.update(list => list.filter(c => c.id !== cat.id));
-        if (this.selectedCategoryId() === cat.id) this.selectedCategoryId.set(null);
-        this.snack.open('Catégorie supprimée', '', { duration: 2500 });
-      },
-      error: () => this.snack.open('Impossible de supprimer cette catégorie', 'Fermer', { duration: 4000 })
+    this.dialog.open(ConfirmDialogComponent, {
+      data: {
+        title: 'Supprimer la catégorie',
+        message: `Supprimer la catégorie « ${cat.name} » ? Tous les plats associés seront également supprimés.`,
+        confirmLabel: 'Supprimer',
+        danger: true
+      }
+    }).afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
+      this.http.delete(`/categories/${cat.id}`).subscribe({
+        next: () => {
+          this.categories.update(list => list.filter(c => c.id !== cat.id));
+          if (this.selectedCategoryId() === cat.id) this.selectedCategoryId.set(null);
+          this.snack.open('Catégorie supprimée', '', { duration: 2500 });
+        },
+        error: () => this.snack.open('Impossible de supprimer cette catégorie', 'Fermer', { duration: 4000 })
+      });
     });
   }
 
@@ -738,13 +750,22 @@ export class MenuCmsComponent implements OnInit {
   }
 
   deleteProduct(p: Product): void {
-    if (!confirm(`Supprimer « ${p.name} » ?`)) return;
-    this.http.delete(`/products/${p.id}`).subscribe({
-      next: () => {
-        this.products.update(list => list.filter(x => x.id !== p.id));
-        this.snack.open('Plat supprimé', '', { duration: 2500 });
-      },
-      error: () => this.snack.open('Erreur lors de la suppression', 'Fermer', { duration: 4000 })
+    this.dialog.open(ConfirmDialogComponent, {
+      data: {
+        title: 'Supprimer le plat',
+        message: `Supprimer « ${p.name} » du menu ?`,
+        confirmLabel: 'Supprimer',
+        danger: true
+      }
+    }).afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
+      this.http.delete(`/products/${p.id}`).subscribe({
+        next: () => {
+          this.products.update(list => list.filter(x => x.id !== p.id));
+          this.snack.open('Plat supprimé', '', { duration: 2500 });
+        },
+        error: () => this.snack.open('Erreur lors de la suppression', 'Fermer', { duration: 4000 })
+      });
     });
   }
 

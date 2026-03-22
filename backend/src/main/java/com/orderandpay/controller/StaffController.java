@@ -32,7 +32,7 @@ public class StaffController {
     @GetMapping
     @PreAuthorize("hasAnyRole('OWNER','MANAGER')")
     public List<StaffDto> list() {
-        UUID restaurantId = TenantContext.get();
+        UUID restaurantId = TenantContext.getCurrentTenant();
         return userRepository.findAllByRestaurantId(restaurantId)
                 .stream()
                 .sorted(Comparator.comparing(User::getCreatedAt))
@@ -45,7 +45,7 @@ public class StaffController {
     @PostMapping
     @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<StaffDto> create(@Valid @RequestBody CreateStaffDto dto) {
-        UUID restaurantId = TenantContext.get();
+        UUID restaurantId = TenantContext.getCurrentTenant();
 
         if (userRepository.findByEmailAndRestaurantId(dto.email(), restaurantId).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Un utilisateur avec cet email existe déjà.");
@@ -107,7 +107,7 @@ public class StaffController {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private User findForTenant(UUID id) {
-        UUID restaurantId = TenantContext.get();
+        UUID restaurantId = TenantContext.getCurrentTenant();
         return userRepository.findById(id)
                 .filter(u -> u.getRestaurant().getId().equals(restaurantId))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));

@@ -31,7 +31,7 @@ import { ALL_PAGES, ROLE_PAGES, NavPage } from './core/role-permissions';
         </div>
         <div class="sidebar__brand-text">
           <span class="sidebar__name">Order & Pay</span>
-          <span class="sidebar__role">{{ auth.getRole() }}</span>
+          <span class="sidebar__role">{{ auth.role() }}</span>
         </div>
       </div>
 
@@ -226,7 +226,7 @@ export class AppComponent {
   private router = inject(Router);
 
   readonly visiblePages = computed(() => {
-    const role    = this.auth.getRole();
+    const role    = this.auth.role();
     const allowed = ROLE_PAGES[role] ?? [];
     return ALL_PAGES.filter(p => allowed.includes(p.route));
   });

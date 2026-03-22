@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, tap } from 'rxjs';
 import { Router } from '@angular/router';
@@ -17,6 +17,8 @@ export class AuthService {
   private readonly RESTAURANT_KEY = 'oap_restaurant_id';
   private readonly ROLE_KEY       = 'oap_role';
 
+  readonly role = signal<string>(localStorage.getItem('oap_role') ?? '');
+
   constructor(private http: HttpClient, private router: Router) {}
 
   login(email: string, password: string): Observable<AuthResponse> {
@@ -25,6 +27,7 @@ export class AuthService {
         localStorage.setItem(this.TOKEN_KEY,      res.token);
         localStorage.setItem(this.RESTAURANT_KEY, res.restaurantId);
         localStorage.setItem(this.ROLE_KEY,       res.role);
+        this.role.set(res.role);
       })
     );
   }
@@ -37,6 +40,7 @@ export class AuthService {
     localStorage.removeItem(this.TOKEN_KEY);
     localStorage.removeItem(this.RESTAURANT_KEY);
     localStorage.removeItem(this.ROLE_KEY);
+    this.role.set('');
     this.router.navigate(['/login']);
   }
 

@@ -53,7 +53,7 @@ interface TableOrder {
     <ion-buttons slot="start">
       <ion-back-button defaultHref="/menu"></ion-back-button>
     </ion-buttons>
-    <ion-title>Suivi — {{ tableToken() }}</ion-title>
+    <ion-title>Suivi</ion-title>
   </ion-toolbar>
 </ion-header>
 

@@ -7,6 +7,7 @@ import { MatInputModule }     from '@angular/material/input';
 import { MatButtonModule }    from '@angular/material/button';
 import { MatIconModule }      from '@angular/material/icon';
 import { AuthService }        from '../../core/services/auth.service';
+import { ROLE_PAGES }         from '../../core/role-permissions';
 
 @Component({
   selector: 'app-login',
@@ -198,7 +199,10 @@ export class LoginComponent {
     this.error.set(null);
     const { email, password } = this.form.value;
     this.auth.login(email!, password!).subscribe({
-      next: () => this.router.navigate(['/dashboard']),
+      next: (res) => {
+        const landing = ROLE_PAGES[res.role]?.[0] ?? '/dashboard';
+        this.router.navigate([landing]);
+      },
       error: () => {
         this.loading.set(false);
         this.error.set('Email ou mot de passe incorrect.');

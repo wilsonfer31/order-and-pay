@@ -132,8 +132,8 @@ Actuellement on filtre par date uniquement.
 ### Détail du calcul TVA sur le ticket
 - Affichage du détail TVA par taux (5.5%, 10%, 20%) sur la page de suivi de commande mobile
 
-### Confirmation visuelle lors de l'annulation de commande
-Remplacer le `window.confirm()` natif par un dialog Ionic/Material plus soigné.
+### ~~Confirmation visuelle lors de l'annulation de commande~~ ✅
+`MatDialog` avec `ConfirmDialogComponent` partagé dans l'admin (cuisine, menu CMS). `AlertController` Ionic dans la mobile app (suivi commande, commandes table). Plus aucun `window.confirm()` ni `alert()` natif.
 
 ---
 

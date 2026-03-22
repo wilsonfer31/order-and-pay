@@ -17,6 +17,7 @@ interface KitchenLine {
   quantity: number;
   status: 'PENDING' | 'COOKING' | 'READY' | 'SERVED';
   notes?: string;
+  options?: string[];
 }
 
 interface KitchenOrder {
@@ -39,6 +40,7 @@ interface KitchenTicket {
   quantity: number;
   lineStatus: 'PENDING' | 'COOKING' | 'READY' | 'SERVED';
   notes?: string;
+  options?: string[];
 }
 
 @Component({
@@ -89,6 +91,7 @@ interface KitchenTicket {
             <span class="ticket__qty">{{ ticket.quantity }}×</span>
             <span class="ticket__name">{{ ticket.productName }}</span>
           </div>
+          @if (ticket.options?.length) { <div class="ticket__options">{{ ticket.options!.join(' · ') }}</div> }
           @if (ticket.notes) { <div class="ticket__notes">{{ ticket.notes }}</div> }
           <button class="action-btn action-btn--primary" (click)="launchTicket(ticket)">
             <mat-icon>play_arrow</mat-icon> Prendre en charge
@@ -129,6 +132,7 @@ interface KitchenTicket {
             <span class="ticket__qty">{{ ticket.quantity }}×</span>
             <span class="ticket__name">{{ ticket.productName }}</span>
           </div>
+          @if (ticket.options?.length) { <div class="ticket__options">{{ ticket.options!.join(' · ') }}</div> }
           @if (ticket.notes) { <div class="ticket__notes">{{ ticket.notes }}</div> }
           <button class="action-btn action-btn--warn" (click)="readyTicket(ticket)">
             <mat-icon>check</mat-icon> Prêt
@@ -167,6 +171,7 @@ interface KitchenTicket {
             <span class="ticket__qty">{{ ticket.quantity }}×</span>
             <span class="ticket__name">{{ ticket.productName }}</span>
           </div>
+          @if (ticket.options?.length) { <div class="ticket__options">{{ ticket.options!.join(' · ') }}</div> }
           @if (ticket.notes) { <div class="ticket__notes">{{ ticket.notes }}</div> }
           <button class="action-btn action-btn--success" (click)="serveTicket(ticket)">
             <mat-icon>delivery_dining</mat-icon> Servi
@@ -255,6 +260,7 @@ interface KitchenTicket {
 
     .card__lines { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
     .card__lines li { font-size: 14px; color: #cbd5e1; }
+    .ticket__options { font-size: 13px; font-weight: 700; color: #fb923c; margin: 4px 0 2px; letter-spacing: .01em; }
     .line-note { font-size: 11px; color: #94a3b8; margin-left: 6px; font-style: italic; }
 
     .card__lines--interactive li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; }
@@ -326,6 +332,7 @@ export class KitchenComponent implements OnInit, OnDestroy {
           quantity:    l.quantity,
           lineStatus:  l.status,
           notes:       l.notes,
+          options:     l.options,
         }))
     );
   }

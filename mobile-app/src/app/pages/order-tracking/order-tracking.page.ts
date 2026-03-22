@@ -2,13 +2,14 @@ import {
   Component, OnInit, OnDestroy,
   ChangeDetectionStrategy, signal, inject
 } from '@angular/core';
+
 import { CommonModule }      from '@angular/common';
 import { ActivatedRoute, Router }    from '@angular/router';
 import { HttpClient }        from '@angular/common/http';
 import {
   IonContent, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton,
   IonProgressBar, IonChip, IonLabel, IonCard, IonCardContent,
-  IonIcon, IonList, IonItem, AlertController
+  IonIcon, IonList, IonItem, AlertController, ViewWillEnter
 } from '@ionic/angular/standalone';
 import { addIcons }          from 'ionicons';
 import { checkmarkCircle, time, timeOutline, restaurant, bicycle, homeOutline, closeCircle, alertCircle } from 'ionicons/icons';
@@ -252,7 +253,7 @@ const STATUS_STEPS: OrderStatus[] = ['CONFIRMED', 'IN_PROGRESS', 'READY', 'DELIV
     }
   `]
 })
-export class OrderTrackingPage implements OnInit, OnDestroy {
+export class OrderTrackingPage implements OnInit, OnDestroy, ViewWillEnter {
   private route   = inject(ActivatedRoute);
   private router  = inject(Router);
   private http    = inject(HttpClient);
@@ -279,12 +280,24 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.loadOrder();
+  }
+
+  ionViewWillEnter(): void {
+    this.loadOrder();
+  }
+
+  private loadOrder(): void {
     const orderId = this.route.snapshot.queryParams['orderId'];
     const t = this.route.snapshot.queryParams['t'] ?? '';
     this.tableToken.set(t);
     if (!orderId) return;
 
-    // Chargement initial de l'état depuis le backend
+    // Réinitialise l'état pour ne pas afficher une ancienne commande
+    this.order.set(null);
+    this.loadError.set(false);
+    this.stomp.deactivate();
+
     this.http.get<OrderState>(`/public/orders/${orderId}`).subscribe({
       next: state => {
         this.order.set(state);
@@ -292,7 +305,6 @@ export class OrderTrackingPage implements OnInit, OnDestroy {
       },
       error: () => {
         this.loadError.set(true);
-        // Tente quand même le WebSocket pour capter les événements en direct
         this.connectWebSocket(orderId);
       }
     });

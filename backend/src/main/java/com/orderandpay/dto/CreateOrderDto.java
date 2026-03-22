@@ -21,6 +21,7 @@ public record CreateOrderDto(
     public record LineDto(
             @NotNull String productId,
             @Positive @Max(99) short quantity,
-            @Size(max = 300) String notes
+            @Size(max = 300) String notes,
+            List<String> optionValueIds
     ) {}
 }

@@ -13,7 +13,7 @@ import {
 } from '@ionic/angular/standalone';
 import { addIcons }          from 'ionicons';
 import { addCircleOutline, removeCircleOutline, trashOutline, checkmarkOutline, homeOutline } from 'ionicons/icons';
-import { CartService }       from '../../services/cart.service';
+import { CartService, CartItem } from '../../services/cart.service';
 
 @Component({
   selector: 'app-order-confirm',
@@ -53,22 +53,27 @@ import { CartService }       from '../../services/cart.service';
       </ion-card-header>
       <ion-card-content>
         <ion-list lines="none">
-          @for (item of cart.cartItems(); track item.product.id) {
+          @for (item of cart.cartItems(); track item.itemKey; let i = $index) {
             <ion-item class="cart-item">
               <ion-label>
                 <h3>{{ item.product.name }}</h3>
-                <ion-note>{{ item.product.priceTtc | currency:'EUR':'symbol':'1.2-2':'fr' }} / unité</ion-note>
+                @if (item.selectedOptions.length > 0) {
+                  <p class="options-summary">{{ optionsLabel(item) }}</p>
+                }
+                <ion-note>
+                  {{ unitTtc(item) | currency:'EUR':'symbol':'1.2-2':'fr' }} / unité
+                </ion-note>
               </ion-label>
               <div slot="end" class="qty-controls">
-                <ion-button fill="clear" size="small" (click)="remove(item.product.id)">
+                <ion-button fill="clear" size="small" (click)="decrement(i)">
                   <ion-icon name="remove-circle-outline" color="danger"></ion-icon>
                 </ion-button>
                 <span class="qty">{{ item.quantity }}</span>
-                <ion-button fill="clear" size="small" (click)="add(item.product)">
+                <ion-button fill="clear" size="small" (click)="increment(i)">
                   <ion-icon name="add-circle-outline" color="primary"></ion-icon>
                 </ion-button>
                 <span class="line-total">
-                  {{ (item.product.priceTtc * item.quantity) | currency:'EUR':'symbol':'1.2-2':'fr' }}
+                  {{ (unitTtc(item) * item.quantity) | currency:'EUR':'symbol':'1.2-2':'fr' }}
                 </span>
               </div>
             </ion-item>
@@ -117,6 +122,9 @@ import { CartService }       from '../../services/cart.service';
     }
     .cart-card { margin: 16px; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,.07); }
     .cart-item { --padding-start: 0; }
+    .options-summary {
+      font-size: 11px; color: #F97316; font-weight: 600; margin-top: 2px;
+    }
     .qty-controls { display: flex; align-items: center; gap: 4px; }
     .qty {
       font-weight: 700; font-size: 15px; min-width: 24px; text-align: center;
@@ -165,8 +173,17 @@ export class OrderConfirmPage implements OnInit {
 
   ngOnInit(): void {}
 
-  add(product: any): void    { this.cart.add(product); }
-  remove(productId: string): void { this.cart.remove(productId); }
+  unitTtc(item: CartItem): number {
+    const optsDeltaTtc = item.selectedOptions.reduce((s, o) => s + o.priceDeltaTtc, 0);
+    return item.product.priceTtc + optsDeltaTtc;
+  }
+
+  optionsLabel(item: CartItem): string {
+    return item.selectedOptions.map(o => o.label).join(' · ');
+  }
+
+  increment(index: number): void { this.cart.incrementItem(index); }
+  decrement(index: number): void { this.cart.decrementItem(index); }
 
   goBack(): void {
     const t = this.route.snapshot.queryParams['t'];

@@ -9,6 +9,20 @@ export interface Category {
   sortOrder: number;
 }
 
+export interface ProductOptionValue {
+  id: string;
+  label: string;
+  priceDeltaHt: number;
+}
+
+export interface ProductOption {
+  id: string;
+  name: string;
+  required: boolean;
+  maxChoices: number;
+  values: ProductOptionValue[];
+}
+
 export interface Product {
   id: string;
   categoryId: string;
@@ -21,6 +35,7 @@ export interface Product {
   allergens?: string[];
   available: boolean;
   upsell: boolean;
+  options: ProductOption[];
 }
 
 export interface MenuResponse {

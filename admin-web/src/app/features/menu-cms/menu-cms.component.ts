@@ -36,6 +36,25 @@ interface Product {
   imageUrl?: string | null;
 }
 
+interface OptionDraft {
+  _id: number;
+  id?: string;   // UUID serveur — préservé pour éviter la recréation des UUIDs
+  name: string;
+  required: boolean;
+  maxChoices: number;
+  values: ValueDraft[];
+}
+
+interface ValueDraft {
+  _id: number;
+  id?: string;   // UUID serveur — préservé pour éviter la recréation des UUIDs
+  label: string;
+  priceDeltaHt: number;
+}
+
+let _nextId = 0;
+const nextId = () => ++_nextId;
+
 @Component({
   selector: 'app-menu-cms',
   standalone: true,
@@ -219,6 +238,86 @@ interface Product {
               <div class="form-toggles">
                 <mat-slide-toggle formControlName="available" color="primary">Disponible</mat-slide-toggle>
                 <mat-slide-toggle formControlName="upsell" color="accent">Upselling</mat-slide-toggle>
+              </div>
+
+              <!-- ── Options (tailles, cuissons, suppléments) ── -->
+              <div class="options-section">
+                <div class="options-section__header">
+                  <span class="options-section__title">
+                    <mat-icon style="font-size:16px;vertical-align:middle">tune</mat-icon>
+                    Options
+                  </span>
+                  <button mat-stroked-button type="button" class="btn-add-option" (click)="addOption()">
+                    <mat-icon>add</mat-icon> Ajouter
+                  </button>
+                </div>
+
+                @if (loadingOptions()) {
+                  <div style="text-align:center;padding:12px"><mat-spinner diameter="20"></mat-spinner></div>
+                }
+
+                @for (opt of editingOptions(); track opt._id; let i = $index) {
+                  <div class="option-block">
+                    <div class="option-block__header">
+                      <input
+                        class="option-name-input"
+                        [value]="opt.name"
+                        (input)="updateOptionField(i, 'name', $any($event.target).value)"
+                        placeholder="Ex: Cuisson, Taille, Suppléments…" />
+                      <button mat-icon-button color="warn" type="button" (click)="removeOption(i)" style="flex-shrink:0">
+                        <mat-icon>delete</mat-icon>
+                      </button>
+                    </div>
+                    <div class="option-block__meta">
+                      <label class="opt-check">
+                        <input
+                          type="checkbox"
+                          [checked]="opt.required"
+                          (change)="updateOptionField(i, 'required', $any($event.target).checked)" />
+                        Obligatoire
+                      </label>
+                      <label class="opt-check">
+                        Max
+                        <input
+                          type="number"
+                          class="opt-max-input"
+                          [value]="opt.maxChoices"
+                          min="1"
+                          (input)="updateOptionField(i, 'maxChoices', +$any($event.target).value)" />
+                        choix
+                      </label>
+                    </div>
+                    <div class="option-values">
+                      @for (val of opt.values; track val._id; let vi = $index) {
+                        <div class="option-value-row">
+                          <input
+                            class="val-label-input"
+                            [value]="val.label"
+                            (input)="updateValueField(i, vi, 'label', $any($event.target).value)"
+                            placeholder="Ex: Saignant, Medium, Grande…" />
+                          <div class="val-price-wrapper">
+                            <span class="val-price-prefix">+</span>
+                            <input
+                              type="number"
+                              class="val-price-input"
+                              [value]="val.priceDeltaHt"
+                              step="0.10"
+                              min="0"
+                              (input)="updateValueField(i, vi, 'priceDeltaHt', +$any($event.target).value)"
+                              placeholder="0.00" />
+                            <span class="val-price-suffix">€ HT</span>
+                          </div>
+                          <button mat-icon-button type="button" (click)="removeOptionValue(i, vi)">
+                            <mat-icon style="font-size:16px">close</mat-icon>
+                          </button>
+                        </div>
+                      }
+                      <button mat-button type="button" class="add-val-btn" (click)="addOptionValue(i)">
+                        <mat-icon>add</mat-icon> Valeur
+                      </button>
+                    </div>
+                  </div>
+                }
               </div>
 
               <!-- Image du plat -->
@@ -463,7 +562,7 @@ interface Product {
 
     /* ── Panneau formulaire ── */
     .form-panel {
-      width: 340px;
+      width: 380px;
       flex-shrink: 0;
       background: white;
       border-left: 1px solid #e5e7eb;
@@ -500,6 +599,128 @@ interface Product {
       margin-top: auto;
     }
 
+    /* ── Options section ── */
+    .options-section {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .options-section__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: #f9fafb;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .options-section__title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-add-option {
+      font-size: 12px !important;
+      height: 30px !important;
+      line-height: 30px !important;
+      padding: 0 10px !important;
+    }
+
+    .option-block {
+      border-bottom: 1px solid #f3f4f6;
+      padding: 12px 14px;
+      &:last-child { border-bottom: none; }
+    }
+    .option-block__header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .option-name-input {
+      flex: 1;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #111827;
+      outline: none;
+      &:focus { border-color: #2563eb; }
+    }
+    .option-block__meta {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 10px;
+    }
+    .opt-check {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: #6b7280;
+      cursor: pointer;
+      input[type="checkbox"] { cursor: pointer; }
+    }
+    .opt-max-input {
+      width: 40px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 13px;
+      text-align: center;
+      outline: none;
+      &:focus { border-color: #2563eb; }
+    }
+    .option-values {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .option-value-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .val-label-input {
+      flex: 1;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 5px 9px;
+      font-size: 12px;
+      outline: none;
+      &:focus { border-color: #2563eb; }
+    }
+    .val-price-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 5px 7px;
+      background: #f9fafb;
+    }
+    .val-price-prefix, .val-price-suffix { font-size: 11px; color: #9ca3af; }
+    .val-price-input {
+      width: 52px;
+      border: none;
+      background: transparent;
+      font-size: 12px;
+      text-align: right;
+      outline: none;
+    }
+    .add-val-btn {
+      font-size: 12px !important;
+      color: #6b7280 !important;
+      padding: 0 !important;
+      height: 28px !important;
+      align-self: flex-start;
+    }
+
+    /* ── Image ── */
     .img-upload-section {
       border: 1px solid #e5e7eb;
       border-radius: 10px;
@@ -536,6 +757,8 @@ export class MenuCmsComponent implements OnInit {
   editingCategory = signal<Category | null>(null);
   uploadingImage  = signal(false);
   currentImageUrl = signal<string | null>(null);
+  editingOptions  = signal<OptionDraft[]>([]);
+  loadingOptions  = signal(false);
 
   filteredProducts = computed(() => {
     const catId = this.selectedCategoryId();
@@ -667,6 +890,31 @@ export class MenuCmsComponent implements OnInit {
       upsell:      p?.upsell      ?? false,
     });
     this.currentImageUrl.set(p?.imageUrl ?? null);
+
+    if (p?.id) {
+      this.loadingOptions.set(true);
+      this.http.get<any[]>(`/products/${p.id}/options`).subscribe({
+        next: opts => {
+          this.editingOptions.set(opts.map(o => ({
+            _id:        nextId(),
+            id:         o.id,
+            name:       o.name,
+            required:   o.required,
+            maxChoices: o.maxChoices,
+            values:     (o.values ?? []).map((v: any) => ({
+              _id:          nextId(),
+              id:           v.id,
+              label:        v.label,
+              priceDeltaHt: v.priceDeltaHt ?? 0,
+            })),
+          })));
+          this.loadingOptions.set(false);
+        },
+        error: () => { this.editingOptions.set([]); this.loadingOptions.set(false); }
+      });
+    } else {
+      this.editingOptions.set([]);
+    }
   }
 
   saveProduct(): void {
@@ -675,7 +923,22 @@ export class MenuCmsComponent implements OnInit {
     const v   = this.productForm.value;
     const p   = this.editingProduct();
     const maxSort = p?.id ? p.sortOrder : this.products().reduce((max, x) => Math.max(max, x.sortOrder), -1);
-    const dto = { ...v, sortOrder: p?.id ? maxSort : maxSort + 1 };
+    const dto = {
+      ...v,
+      sortOrder:  p?.id ? maxSort : maxSort + 1,
+      imageUrl:   this.currentImageUrl(),
+      options: this.editingOptions().map(opt => ({
+        id:         opt.id,
+        name:       opt.name,
+        required:   opt.required,
+        maxChoices: opt.maxChoices,
+        values:     opt.values.map(val => ({
+          id:           val.id,
+          label:        val.label,
+          priceDeltaHt: val.priceDeltaHt || 0,
+        })),
+      })),
+    };
     const req$ = p?.id
       ? this.http.put<Product>(`/products/${p.id}`, dto)
       : this.http.post<Product>('/products', dto);
@@ -738,11 +1001,11 @@ export class MenuCmsComponent implements OnInit {
   }
 
   toggleAvailability(p: Product): void {
-    const updated = { ...p, available: !p.available };
     this.http.put<Product>(`/products/${p.id}`, {
       name: p.name, description: p.description, categoryId: p.categoryId,
       priceHt: p.priceHt, vatRate: p.vatRate, costPrice: p.costPrice,
       upsell: p.upsell, available: !p.available, sortOrder: p.sortOrder,
+      // options: null → les options existantes sont conservées
     }).subscribe({
       next: saved => this.products.update(list => list.map(x => x.id === saved.id ? saved : x)),
       error: () => this.snack.open('Erreur', 'Fermer', { duration: 3000 })
@@ -773,5 +1036,59 @@ export class MenuCmsComponent implements OnInit {
     this.panelMode.set(null);
     this.editingProduct.set(null);
     this.editingCategory.set(null);
+    this.editingOptions.set([]);
+  }
+
+  // ── Options ───────────────────────────────────────────────────────
+
+  addOption(): void {
+    this.editingOptions.update(opts => [
+      ...opts,
+      { _id: nextId(), name: '', required: false, maxChoices: 1, values: [] }
+    ]);
+  }
+
+  removeOption(i: number): void {
+    this.editingOptions.update(opts => opts.filter((_, idx) => idx !== i));
+  }
+
+  addOptionValue(optIndex: number): void {
+    this.editingOptions.update(opts => {
+      const newOpts = [...opts];
+      newOpts[optIndex] = {
+        ...newOpts[optIndex],
+        values: [...newOpts[optIndex].values, { _id: nextId(), label: '', priceDeltaHt: 0 }]
+      };
+      return newOpts;
+    });
+  }
+
+  removeOptionValue(optIndex: number, valIndex: number): void {
+    this.editingOptions.update(opts => {
+      const newOpts = [...opts];
+      newOpts[optIndex] = {
+        ...newOpts[optIndex],
+        values: newOpts[optIndex].values.filter((_, i) => i !== valIndex)
+      };
+      return newOpts;
+    });
+  }
+
+  updateOptionField(i: number, field: keyof OptionDraft, value: any): void {
+    this.editingOptions.update(opts => {
+      const newOpts = [...opts];
+      newOpts[i] = { ...newOpts[i], [field]: value };
+      return newOpts;
+    });
+  }
+
+  updateValueField(optIndex: number, valIndex: number, field: keyof ValueDraft, value: any): void {
+    this.editingOptions.update(opts => {
+      const newOpts = [...opts];
+      const vals = [...newOpts[optIndex].values];
+      vals[valIndex] = { ...vals[valIndex], [field]: value };
+      newOpts[optIndex] = { ...newOpts[optIndex], values: vals };
+      return newOpts;
+    });
   }
 }

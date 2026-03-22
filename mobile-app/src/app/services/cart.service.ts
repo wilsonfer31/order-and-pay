@@ -1,10 +1,26 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { Product } from './menu.service';
 
+export interface SelectedOption {
+  optionId:     string;
+  optionName:   string;
+  valueId:      string;
+  label:        string;
+  priceDeltaHt: number;
+  priceDeltaTtc: number;
+}
+
 export interface CartItem {
-  product: Product;
-  quantity: number;
-  notes?: string;
+  product:         Product;
+  quantity:        number;
+  notes?:          string;
+  selectedOptions: SelectedOption[];
+  /** Clé unique : productId + valueIds triés — permet plusieurs lignes pour le même produit avec des options différentes. */
+  itemKey:         string;
+}
+
+function buildItemKey(productId: string, valueIds: string[]): string {
+  return productId + ':' + [...valueIds].sort().join(',');
 }
 
 @Injectable({ providedIn: 'root' })
@@ -20,7 +36,10 @@ export class CartService {
   );
 
   readonly totalTtc = computed(() =>
-    this.items().reduce((sum, i) => sum + i.product.priceTtc * i.quantity, 0)
+    this.items().reduce((sum, i) => {
+      const optsDeltaTtc = i.selectedOptions.reduce((s, o) => s + o.priceDeltaTtc, 0);
+      return sum + (i.product.priceTtc + optsDeltaTtc) * i.quantity;
+    }, 0)
   );
 
   readonly cartItems = this.items.asReadonly();
@@ -31,37 +50,55 @@ export class CartService {
     this.tableToken.set(token);
   }
 
-  add(product: Product, qty = 1): void {
+  add(product: Product, qty = 1, selectedOptions: SelectedOption[] = []): void {
+    const key = buildItemKey(product.id, selectedOptions.map(o => o.valueId));
     this.items.update(items => {
-      const existing = items.find(i => i.product.id === product.id);
+      const existing = items.find(i => i.itemKey === key);
       if (existing) {
         return items.map(i =>
-          i.product.id === product.id
-            ? { ...i, quantity: i.quantity + qty }
-            : i
+          i.itemKey === key ? { ...i, quantity: i.quantity + qty } : i
         );
       }
-      return [...items, { product, quantity: qty }];
+      return [...items, { product, quantity: qty, selectedOptions, itemKey: key }];
     });
   }
 
+  /** Décrémente la dernière ligne trouvée pour ce productId. */
   remove(productId: string): void {
     this.items.update(items => {
-      const existing = items.find(i => i.product.id === productId);
-      if (!existing) return items;
-      if (existing.quantity <= 1) {
-        return items.filter(i => i.product.id !== productId);
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (items[i].product.id === productId) {
+          if (items[i].quantity <= 1) {
+            return items.filter((_, idx) => idx !== i);
+          }
+          return items.map((it, idx) =>
+            idx === i ? { ...it, quantity: it.quantity - 1 } : it
+          );
+        }
       }
-      return items.map(i =>
-        i.product.id === productId
-          ? { ...i, quantity: i.quantity - 1 }
-          : i
-      );
+      return items;
+    });
+  }
+
+  incrementItem(index: number): void {
+    this.items.update(items =>
+      items.map((item, i) => i === index ? { ...item, quantity: item.quantity + 1 } : item)
+    );
+  }
+
+  decrementItem(index: number): void {
+    this.items.update(items => {
+      const item = items[index];
+      if (!item) return items;
+      if (item.quantity <= 1) return items.filter((_, i) => i !== index);
+      return items.map((it, i) => i === index ? { ...it, quantity: it.quantity - 1 } : it);
     });
   }
 
   getQty(productId: string): number {
-    return this.items().find(i => i.product.id === productId)?.quantity ?? 0;
+    return this.items()
+      .filter(i => i.product.id === productId)
+      .reduce((sum, i) => sum + i.quantity, 0);
   }
 
   clear(): void {
@@ -74,9 +111,10 @@ export class CartService {
       tableToken: this.tableToken(),
       source:     'CLIENT_APP',
       lines: this.items().map(i => ({
-        productId: i.product.id,
-        quantity:  i.quantity,
-        notes:     i.notes ?? null
+        productId:      i.product.id,
+        quantity:       i.quantity,
+        notes:          i.notes ?? null,
+        optionValueIds: i.selectedOptions.map(o => o.valueId),
       }))
     };
   }

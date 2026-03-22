@@ -7,7 +7,10 @@ import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -51,17 +54,28 @@ public class OrderLine {
 
     private String notes;
 
+    @OneToMany(mappedBy = "orderLine", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<OrderLineOption> selectedOptions = new ArrayList<>();
+
     @Column(name = "created_at", updatable = false) @Builder.Default private Instant createdAt = Instant.now();
     @UpdateTimestamp @Column(name = "updated_at") private Instant updatedAt;
 
     // ── Factory ───────────────────────────────────────────────────────────────
 
-    public static OrderLine from(Order order, Product product, short qty, String notes) {
-        BigDecimal lineHt  = product.getPriceHt().multiply(BigDecimal.valueOf(qty));
-        BigDecimal vatMult = BigDecimal.ONE.add(product.getVatRate().divide(new BigDecimal("100")));
-        BigDecimal lineTtc = lineHt.multiply(vatMult).setScale(4, java.math.RoundingMode.HALF_UP);
+    public static OrderLine from(Order order, Product product, short qty, String notes,
+                                 List<OrderLineOption> options) {
+        // Prix unitaire HT = prix de base + somme des surcoûts d'options
+        BigDecimal optionsDeltaHt = options.stream()
+                .map(OrderLineOption::getPriceDeltaHt)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        return OrderLine.builder()
+        BigDecimal unitPriceHt = product.getPriceHt().add(optionsDeltaHt);
+        BigDecimal lineHt      = unitPriceHt.multiply(BigDecimal.valueOf(qty));
+        BigDecimal vatMult     = BigDecimal.ONE.add(product.getVatRate().divide(new BigDecimal("100")));
+        BigDecimal lineTtc     = lineHt.multiply(vatMult).setScale(4, RoundingMode.HALF_UP);
+
+        OrderLine line = OrderLine.builder()
                 .order(order)
                 .product(product)
                 .productSnapshot(Map.of(
@@ -71,12 +85,20 @@ public class OrderLine {
                         "category",  product.getCategory() != null ? product.getCategory().getName() : ""
                 ))
                 .quantity(qty)
-                .unitPriceHt(product.getPriceHt())
+                .unitPriceHt(unitPriceHt)
                 .vatRate(product.getVatRate())
                 .lineTotalHt(lineHt)
                 .lineTotalTtc(lineTtc)
                 .notes(notes)
                 .build();
+
+        options.forEach(o -> o.setOrderLine(line));
+        line.getSelectedOptions().addAll(options);
+        return line;
+    }
+
+    public static OrderLine from(Order order, Product product, short qty, String notes) {
+        return from(order, product, qty, notes, List.of());
     }
 
     public enum LineStatus { PENDING, COOKING, READY, SERVED, CANCELLED }

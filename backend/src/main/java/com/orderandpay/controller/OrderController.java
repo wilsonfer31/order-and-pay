@@ -56,6 +56,11 @@ public class OrderController {
                                 lm.put("quantity", l.getQuantity());
                                 lm.put("status", l.getStatus().name());
                                 lm.put("notes", l.getNotes());
+                                lm.put("options", l.getSelectedOptions().stream()
+                                        .map(opt -> opt.getOptionName() != null
+                                                ? opt.getOptionName() + " : " + opt.getLabel()
+                                                : opt.getLabel())
+                                        .toList());
                                 return lm;
                             })
                             .toList();

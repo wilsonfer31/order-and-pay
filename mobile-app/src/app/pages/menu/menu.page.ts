@@ -9,14 +9,16 @@ import {
   IonContent, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
   IonCard, IonCardContent,
   IonCardHeader, IonCardTitle, IonButton, IonFab,
-  IonFabButton, IonIcon, IonChip, IonSpinner, IonFooter
+  IonFabButton, IonIcon, IonChip, IonSpinner, IonFooter,
+  ModalController, ViewWillEnter
 } from '@ionic/angular/standalone';
 import { addIcons }          from 'ionicons';
 import { cartOutline, addCircleOutline, removeCircleOutline, arrowForwardOutline, listOutline, chevronBackOutline, cameraOutline, checkmarkCircleOutline } from 'ionicons/icons';
 import { FormsModule }       from '@angular/forms';
 import { switchMap }         from 'rxjs';
 import { MenuService, Category, Product } from '../../services/menu.service';
-import { CartService }                    from '../../services/cart.service';
+import { CartService, SelectedOption }    from '../../services/cart.service';
+import { OptionPickerModal }              from './option-picker.modal';
 
 @Component({
   selector: 'app-menu',
@@ -104,6 +106,13 @@ import { CartService }                    from '../../services/cart.service';
             <div class="allergens">
               @for (a of product.allergens; track a) {
                 <ion-chip color="warning" style="font-size:11px">{{ a }}</ion-chip>
+              }
+            </div>
+          }
+          @if (product.options?.length) {
+            <div class="options-hint">
+              @for (opt of product.options; track opt.id) {
+                <span class="options-hint__tag">{{ opt.name }}</span>
               }
             </div>
           }
@@ -242,6 +251,17 @@ import { CartService }                    from '../../services/cart.service';
       -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     }
     .allergens { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+
+    .options-hint {
+      display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px;
+    }
+    .options-hint__tag {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      background: #FFF7ED; color: #EA580C;
+      border: 1px solid #FED7AA;
+      padding: 2px 8px; border-radius: 20px;
+    }
+
     .product-footer {
       display: flex; align-items: center; justify-content: space-between;
       margin-top: 10px;
@@ -280,12 +300,13 @@ import { CartService }                    from '../../services/cart.service';
     }
   `]
 })
-export class MenuPage implements OnInit {
+export class MenuPage implements OnInit, ViewWillEnter {
   private route        = inject(ActivatedRoute);
   private router       = inject(Router);
   private menuService  = inject(MenuService);
   private http         = inject(HttpClient);
   private destroyRef   = inject(DestroyRef);
+  private modalCtrl    = inject(ModalController);
   readonly cart        = inject(CartService);
 
   categories           = signal<Category[]>([]);
@@ -337,9 +358,39 @@ export class MenuPage implements OnInit {
     });
   }
 
-  addToCart(product: Product): void     { this.cart.add(product); }
+  ionViewWillEnter(): void {
+    const token = this.tableToken();
+    if (!token) return;
+    // Rafraîchit silencieusement les produits pour que les UUIDs d'options
+    // restent cohérents avec la base de données (évite les erreurs "Option introuvable").
+    this.menuService.getMenuByToken(token).subscribe(menu => {
+      this.allProducts.set(menu.products);
+    });
+  }
+
+  async addToCart(product: Product): Promise<void> {
+    if (!product.available) return;
+
+    if (product.options?.length > 0) {
+      const modal = await this.modalCtrl.create({
+        component:          OptionPickerModal,
+        componentProps:     { product },
+        initialBreakpoint:  0.80,
+        breakpoints:        [0, 0.80, 1],
+        handleBehavior:     'cycle',
+      });
+      await modal.present();
+      const { data, role } = await modal.onWillDismiss();
+      if (role === 'confirm') {
+        this.cart.add(product, 1, data.selectedOptions as SelectedOption[]);
+      }
+    } else {
+      this.cart.add(product);
+    }
+  }
+
   removeFromCart(product: Product): void { this.cart.remove(product.id); }
-  getQty(productId: string): number     { return this.cart.getQty(productId); }
+  getQty(productId: string): number      { return this.cart.getQty(productId); }
 
   goToCart(): void {
     this.router.navigate(['/order-confirm'], { queryParams: { t: this.tableToken() } });
@@ -371,7 +422,6 @@ export class MenuPage implements OnInit {
         this.uploadingProductId.set(null);
         this.justUploadedId.set(product.id);
         setTimeout(() => this.justUploadedId.set(null), 3000);
-        // Reset input so same file can be re-selected
         input.value = '';
       },
       error: () => {

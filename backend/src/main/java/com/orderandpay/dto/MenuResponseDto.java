@@ -25,6 +25,21 @@ public record MenuResponseDto(
             BigDecimal vatRate,
             String[]   allergens,
             boolean    available,
-            boolean    upsell
+            boolean    upsell,
+            List<OptionDto> options
+    ) {}
+
+    public record OptionDto(
+            String         id,
+            String         name,
+            boolean        required,
+            short          maxChoices,
+            List<ValueDto> values
+    ) {}
+
+    public record ValueDto(
+            String     id,
+            String     label,
+            BigDecimal priceDeltaHt
     ) {}
 }

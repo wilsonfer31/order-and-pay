@@ -3,6 +3,8 @@ package com.orderandpay.service;
 import com.orderandpay.dto.CreateOrderDto;
 import com.orderandpay.dto.OrderEventDto;
 import com.orderandpay.entity.*;
+
+import java.util.ArrayList;
 import com.orderandpay.repository.*;
 import com.orderandpay.websocket.OrderEventPublisher;
 import lombok.RequiredArgsConstructor;
@@ -78,8 +80,45 @@ public class OrderService {
                 productRepository.save(product);
             }
 
+            // Résolution des options choisies
+            List<OrderLineOption> lineOptions = new ArrayList<>();
+            if (lineDto.optionValueIds() != null && !lineDto.optionValueIds().isEmpty()) {
+                // Initialise les collections lazy dans la transaction
+                product.getOptions().forEach(opt -> opt.getValues().size());
+
+                for (String valueIdStr : lineDto.optionValueIds()) {
+                    UUID valueId;
+                    try {
+                        valueId = UUID.fromString(valueIdStr);
+                    } catch (IllegalArgumentException e) {
+                        throw new IllegalArgumentException("optionValueId invalide: " + valueIdStr);
+                    }
+
+                    // Cherche la valeur ET son groupe parent pour snapshot le nom
+                    String[] optionNameHolder = {null};
+                    ProductOptionValue foundValue = product.getOptions().stream()
+                            .filter(o -> {
+                                boolean found = o.getValues().stream().anyMatch(v -> v.getId().equals(valueId));
+                                if (found) optionNameHolder[0] = o.getName();
+                                return found;
+                            })
+                            .flatMap(o -> o.getValues().stream())
+                            .filter(v -> v.getId().equals(valueId))
+                            .findFirst()
+                            .orElseThrow(() -> new IllegalArgumentException(
+                                    "Option introuvable sur ce produit: " + valueIdStr));
+
+                    lineOptions.add(OrderLineOption.builder()
+                            .optionValueId(foundValue.getId())
+                            .optionName(optionNameHolder[0])
+                            .label(foundValue.getLabel())
+                            .priceDeltaHt(foundValue.getPriceDeltaHt())
+                            .build());
+                }
+            }
+
             order.getLines().add(
-                    OrderLine.from(order, product, lineDto.quantity(), lineDto.notes())
+                    OrderLine.from(order, product, lineDto.quantity(), lineDto.notes(), lineOptions)
             );
         }
 

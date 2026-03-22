@@ -278,7 +278,7 @@ class OrderServiceTest {
                 "CLIENT_APP",
                 (short) 2,
                 null,
-                List.of(new CreateOrderDto.LineDto(prodId.toString(), qty, null))
+                List.of(new CreateOrderDto.LineDto(prodId.toString(), qty, null, null))
         );
     }
 

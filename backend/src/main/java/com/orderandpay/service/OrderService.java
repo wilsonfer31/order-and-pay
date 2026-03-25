@@ -117,8 +117,12 @@ public class OrderService {
                 }
             }
 
+            String destination = product.getCategory() != null
+                    ? product.getCategory().getDestination()
+                    : "KITCHEN";
+
             order.getLines().add(
-                    OrderLine.from(order, product, lineDto.quantity(), lineDto.notes(), lineOptions)
+                    OrderLine.from(order, product, lineDto.quantity(), lineDto.notes(), lineOptions, destination)
             );
         }
 
@@ -170,8 +174,8 @@ public class OrderService {
 
         line.setStatus(newStatus);
 
-        // Si une ligne passe en COOKING et que la commande est encore CONFIRMED, la passer en IN_PROGRESS
-        if (newStatus == OrderLine.LineStatus.COOKING
+        // Si une ligne passe en COOKING ou en READY (BAR) et que la commande est encore CONFIRMED → IN_PROGRESS
+        if ((newStatus == OrderLine.LineStatus.COOKING || newStatus == OrderLine.LineStatus.READY)
                 && order.getStatus() == Order.OrderStatus.CONFIRMED) {
             order.setStatus(Order.OrderStatus.IN_PROGRESS);
             var statusEvent = OrderEventDto.orderStatusChanged(restaurantId, orderId,
@@ -195,8 +199,10 @@ public class OrderService {
                 .filter(l -> l.getStatus() != OrderLine.LineStatus.CANCELLED)
                 .toList();
 
+        // Une ligne BAR en READY = servie (la boisson est prête/remise au client)
         boolean allServed = nonCancelledLines.stream()
-                .allMatch(l -> l.getStatus() == OrderLine.LineStatus.SERVED);
+                .allMatch(l -> l.getStatus() == OrderLine.LineStatus.SERVED
+                            || ("BAR".equals(l.getDestination()) && l.getStatus() == OrderLine.LineStatus.READY));
 
         boolean allReadyOrServed = nonCancelledLines.stream()
                 .allMatch(l -> l.getStatus() == OrderLine.LineStatus.READY

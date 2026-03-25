@@ -32,7 +32,8 @@ public class MenuService {
 
         List<MenuResponseDto.CategoryDto> catDtos = categories.stream()
                 .map(c -> new MenuResponseDto.CategoryDto(
-                        c.getId().toString(), c.getName(), c.getImageUrl(), c.getSortOrder()))
+                        c.getId().toString(), c.getName(), c.getImageUrl(), c.getSortOrder(),
+                        c.getDestination() != null ? c.getDestination() : "KITCHEN"))
                 .toList();
 
         List<MenuResponseDto.ProductDto> productDtos = products.stream()

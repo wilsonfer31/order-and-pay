@@ -115,6 +115,10 @@ Each table has a `session_started_at` timestamp (added in `V3__add_table_session
 ### Public (unauthenticated) endpoints
 `PublicMenuController` serves the menu, handles order placement, and manages table status for the mobile app. The mobile app does not require login. Orders are placed via `POST /public/orders`.
 
+Public bar endpoints (also unauthenticated, resolved via table token `t`):
+- `GET /public/bar?t=xxx` — returns pending BAR lines grouped by order/table
+- `PATCH /public/bar/orders/{orderId}/lines/{lineId}/ready?t=xxx` — marks a drink line as READY
+
 ### Product options (tailles, cuissons, suppléments)
 Each product can have multiple `ProductOption` groups (e.g. "Viande", "Cuisson"), each with `ProductOptionValue` entries. Options are optional or required, with a configurable `maxChoices`.
 
@@ -135,6 +139,16 @@ Flyway runs on startup. Migration files in `backend/src/main/resources/db/migrat
 - `V7__order_line_options_drop_fk.sql` — removes FK constraint on order_line_options for historical snapshots
 - `V8__order_line_option_name.sql` — adds `option_name` column to `order_line_options`
 - `V9__backfill_option_name.sql` — backfills `option_name` for existing orders via join on `product_option_values`
+- `V10__category_destination.sql` — adds `destination VARCHAR(20) NOT NULL DEFAULT 'KITCHEN'` to `categories` and `order_lines`; auto-sets BAR for common drink category names in demo data
+
+### Bar/Kitchen routing (séparation boissons / cuisine)
+Each `Category` has a `destination` field (`KITCHEN` or `BAR`, default `KITCHEN`). When an order is confirmed, `OrderService` copies the category's destination onto each `OrderLine` as a snapshot (protects historical routing if category changes later).
+
+- **Kitchen screen** (`GET /orders`) — filters out BAR lines and skips orders with zero kitchen lines
+- **Bar screen** (`GET /orders/bar`) — authenticated endpoint returning BAR-only lines (excluding CANCELLED/SERVED)
+- **Mobile bar page** (`/bar?t=xxx`) — public endpoint, drinks checklist per table with "Prêt" button per line
+- **Admin Menu CMS** — CUISINE/BAR selector on category form; BAR badge on category list
+- `OrderService.updateLineStatus()` triggers IN_PROGRESS on both COOKING (kitchen) and READY (bar lines that skip COOKING)
 
 ### Tax calculations
 French TVA rates (5.5%, 10%, 20%) are computed in `TaxService.java` and applied per `OrderLine`.
@@ -142,11 +156,12 @@ French TVA rates (5.5%, 10%, 20%) are computed in `TaxService.java` and applied 
 ## Admin Web Features
 
 - **Dashboard** (`/`) — KPI cards (CA TTC, panier moyen, marge brute, TVA), bar chart (30-day revenue), table status grid, real-time activity feed with expandable ORDER_CREATED details
-- **Kitchen** (`/kitchen`) — live order queue with STOMP updates; affiche les options choisies ("Viande : Bleu") en orange sous chaque ticket
+- **Kitchen** (`/kitchen`) — live order queue with STOMP updates; affiche les options choisies ("Viande : Bleu") en orange sous chaque ticket; kitchen-only lines (BAR lines filtered out)
 - **Floor editor** (`/floor`) — drag-and-drop table layout
 - **Orders history** (`/orders`) — date-range filter, expandable order list, KPI summary
-- **Menu CMS** (`/menu`) — product and category management with options editor (groupes + valeurs, UUIDs préservés)
-- **Sidebar** — collapsible to icon-rail (state persisted in localStorage)
+- **Menu CMS** (`/menu`) — product and category management with options editor (groupes + valeurs, UUIDs préservés); CUISINE/BAR destination selector per category
+- **Sidebar** — collapsible to icon-rail (state persisted in localStorage); dark/light mode toggle (moon/sun icon, persisted in localStorage)
+- **Dark mode** — `mat.define-dark-theme()` under `.dark-theme` on `<html>`; defaults to light mode (`dark-mode` key in localStorage)
 
 ## Key Patterns
 

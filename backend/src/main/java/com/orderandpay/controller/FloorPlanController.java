@@ -126,10 +126,13 @@ public class FloorPlanController {
             @RequestParam String status) {
 
         RestaurantTable.TableStatus newStatus = RestaurantTable.TableStatus.valueOf(status.toUpperCase());
-        tableRepository.findByIdAndRestaurantId(tableId, TenantContext.getCurrentTenant())
+        UUID restaurantId = TenantContext.getCurrentTenant();
+        tableRepository.findByIdAndRestaurantId(tableId, restaurantId)
                 .ifPresent(table -> {
                     table.setStatus(newStatus);
                     tableRepository.save(table);
+                    eventPublisher.notifyTables(restaurantId,
+                            OrderEventDto.tableStatusChanged(restaurantId, table.getId(), table.getLabel(), newStatus.name()));
                 });
         return ResponseEntity.noContent().build();
     }

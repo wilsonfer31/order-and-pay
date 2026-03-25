@@ -19,6 +19,7 @@ interface Category {
   name: string;
   sortOrder: number;
   visible: boolean;
+  destination: 'KITCHEN' | 'BAR';
 }
 
 interface Product {
@@ -102,8 +103,11 @@ const nextId = () => ++_nextId;
 
         @for (cat of categories(); track cat.id) {
           <div class="cat-item" [class.cat-item--active]="selectedCategoryId() === cat.id">
-            <mat-icon (click)="selectedCategoryId.set(cat.id)" class="cat-item__icon">folder</mat-icon>
+            <mat-icon (click)="selectedCategoryId.set(cat.id)" class="cat-item__icon">{{ cat.destination === 'BAR' ? 'local_bar' : 'folder' }}</mat-icon>
             <span (click)="selectedCategoryId.set(cat.id)" class="cat-item__name">{{ cat.name }}</span>
+            @if (cat.destination === 'BAR') {
+              <span class="cat-dest-bar" matTooltip="Servi par le bar">BAR</span>
+            }
             <span class="cat-count">{{ countInCat(cat.id) }}</span>
             <div class="cat-actions">
               <button mat-icon-button class="cat-edit-btn" (click)="openCategoryForm(cat)" matTooltip="Renommer">
@@ -379,6 +383,21 @@ const nextId = () => ++_nextId;
                 <input matInput type="number" formControlName="sortOrder" min="0" />
               </mat-form-field>
 
+              <mat-form-field appearance="outline">
+                <mat-label>Destination</mat-label>
+                <mat-select formControlName="destination">
+                  <mat-option value="KITCHEN">
+                    <mat-icon style="vertical-align:middle;margin-right:6px;font-size:18px">restaurant</mat-icon>
+                    Cuisine
+                  </mat-option>
+                  <mat-option value="BAR">
+                    <mat-icon style="vertical-align:middle;margin-right:6px;font-size:18px">local_bar</mat-icon>
+                    Bar (boissons)
+                  </mat-option>
+                </mat-select>
+                <mat-hint>Les lignes BAR n'apparaissent pas en cuisine — le serveur les prépare.</mat-hint>
+              </mat-form-field>
+
               <div class="form-panel__footer">
                 <button mat-button type="button" (click)="closePanel()">Annuler</button>
                 <button mat-flat-button class="btn-add" type="submit" [disabled]="categoryForm.invalid || saving()">
@@ -473,6 +492,11 @@ const nextId = () => ++_nextId;
     }
     .cat-item__icon { font-size: 18px; width: 18px; height: 18px; color: #9ca3af; flex-shrink: 0; }
     .cat-item__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cat-dest-bar {
+      font-size: 9px; font-weight: 700; padding: 1px 5px;
+      border-radius: 4px; background: #dbeafe; color: #1d4ed8;
+      letter-spacing: .04em; flex-shrink: 0;
+    }
     .cat-count {
       font-size: 11px;
       background: #f3f4f6;
@@ -783,8 +807,9 @@ export class MenuCmsComponent implements OnInit {
   });
 
   categoryForm = this.fb.group({
-    name:      ['', [Validators.required, Validators.maxLength(100)]],
-    sortOrder: [0],
+    name:        ['', [Validators.required, Validators.maxLength(100)]],
+    sortOrder:   [0],
+    destination: ['KITCHEN'],
   });
 
   constructor(
@@ -826,7 +851,7 @@ export class MenuCmsComponent implements OnInit {
   openCategoryForm(cat: Category | null): void {
     this.editingCategory.set(cat);
     this.panelMode.set('category');
-    this.categoryForm.reset({ name: cat?.name ?? '', sortOrder: cat?.sortOrder ?? 0 });
+    this.categoryForm.reset({ name: cat?.name ?? '', sortOrder: cat?.sortOrder ?? 0, destination: cat?.destination ?? 'KITCHEN' });
   }
 
   saveCategory(): void {

@@ -7,12 +7,12 @@ import { CommonModule }     from '@angular/common';
 import { Router }           from '@angular/router';
 import { FormsModule }      from '@angular/forms';
 import {
-  IonContent, IonHeader, IonToolbar, IonTitle,
+  IonContent, IonHeader, IonToolbar, IonTitle, IonButtons,
   IonButton, IonCard, IonCardContent, IonCardHeader, IonCardTitle,
   IonSpinner, IonIcon, IonText
 } from '@ionic/angular/standalone';
 import { addIcons }         from 'ionicons';
-import { qrCodeOutline, keypadOutline, cameraOutline } from 'ionicons/icons';
+import { qrCodeOutline, keypadOutline, cameraOutline, wineOutline } from 'ionicons/icons';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { HttpClient } from '@angular/common/http';
 import { TableService, TableInfo } from '../../services/table.service';
@@ -26,7 +26,7 @@ import { map } from 'rxjs/operators';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     CommonModule, FormsModule,
-    IonContent, IonHeader, IonToolbar, IonTitle,
+    IonContent, IonHeader, IonToolbar, IonTitle, IonButtons,
     IonButton, IonCard, IonCardContent, IonCardHeader, IonCardTitle,
     IonSpinner, IonIcon, IonText
   ],
@@ -34,6 +34,11 @@ import { map } from 'rxjs/operators';
 <ion-header>
   <ion-toolbar color="primary">
     <ion-title>Choisir votre table</ion-title>
+    <ion-buttons slot="end">
+      <ion-button (click)="goToBar()" title="Bar" color="light" [disabled]="!anyTableToken()">
+        <ion-icon slot="icon-only" name="wine-outline"></ion-icon>
+      </ion-button>
+    </ion-buttons>
   </ion-toolbar>
 </ion-header>
 
@@ -271,7 +276,7 @@ export class ScanQrPage implements OnInit, AfterViewInit, OnDestroy, ViewWillEnt
   private destroy$ = new Subject<void>();
 
   constructor() {
-    addIcons({ qrCodeOutline, keypadOutline, cameraOutline });
+    addIcons({ qrCodeOutline, keypadOutline, cameraOutline, wineOutline });
   }
 
   ngOnInit(): void {
@@ -346,6 +351,15 @@ export class ScanQrPage implements OnInit, AfterViewInit, OnDestroy, ViewWillEnt
 
   selectTable(table: TableInfo): void {
     this.navigateToMenu(table.qrToken ?? table.label);
+  }
+
+  anyTableToken(): string | null {
+    return this.tables().find(t => t.qrToken)?.qrToken ?? null;
+  }
+
+  goToBar(): void {
+    const token = this.anyTableToken();
+    if (token) this.router.navigate(['/bar'], { queryParams: { t: token } });
   }
 
   markClean(table: TableInfo): void {

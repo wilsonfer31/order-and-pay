@@ -11,7 +11,7 @@ public record MenuResponseDto(
         List<ProductDto>  products
 ) {
     public record CategoryDto(
-            String id, String name, String imageUrl, int sortOrder
+            String id, String name, String imageUrl, int sortOrder, String destination
     ) {}
 
     public record ProductDto(

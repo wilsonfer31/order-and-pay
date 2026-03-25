@@ -7,5 +7,6 @@ export const routes: Routes = [
   { path: 'order-confirm', loadComponent: () => import('./pages/order-confirm/order-confirm.page').then(m => m.OrderConfirmPage) },
   { path: 'track',  loadComponent: () => import('./pages/order-tracking/order-tracking.page').then(m => m.OrderTrackingPage) },
   { path: 'table-orders', loadComponent: () => import('./pages/table-orders/table-orders.page').then(m => m.TableOrdersPage) },
+  { path: 'bar',         loadComponent: () => import('./pages/bar/bar.page').then(m => m.BarPage) },
   { path: '**',     redirectTo: 'scan' }
 ];

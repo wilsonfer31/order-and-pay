@@ -1,4 +1,4 @@
-import { Component, inject, signal, computed } from '@angular/core';
+import { Component, inject, signal, computed, effect } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } from '@angular/router';
 // NavigationEnd also imported below as NavEnd to avoid type narrowing issues
 import { CommonModule }      from '@angular/common';
@@ -51,6 +51,12 @@ import { ALL_PAGES, ROLE_PAGES, NavPage } from './core/role-permissions';
         <button class="nav-item nav-item--logout" (click)="auth.logout()" matTooltip="Déconnexion" matTooltipPosition="right" [matTooltipDisabled]="!collapsed()">
           <mat-icon>logout</mat-icon>
           <span class="nav-label">Déconnexion</span>
+        </button>
+        <button class="nav-item nav-item--theme" (click)="toggleDarkMode()"
+                [matTooltip]="darkMode() ? 'Mode clair' : 'Mode sombre'"
+                matTooltipPosition="right" [matTooltipDisabled]="!collapsed()">
+          <mat-icon>{{ darkMode() ? 'light_mode' : 'dark_mode' }}</mat-icon>
+          <span class="nav-label">{{ darkMode() ? 'Mode clair' : 'Mode sombre' }}</span>
         </button>
         <button class="nav-item nav-item--toggle" (click)="toggleSidebar()" [matTooltip]="collapsed() ? 'Afficher le menu' : 'Réduire'" matTooltipPosition="right">
           <mat-icon>{{ collapsed() ? 'chevron_right' : 'chevron_left' }}</mat-icon>
@@ -209,6 +215,7 @@ import { ALL_PAGES, ROLE_PAGES, NavPage } from './core/role-permissions';
       flex-direction: column;
       gap: 2px;
       .nav-item--logout { color: #6b7280; &:hover { background: #fef2f2; color: #dc2626; mat-icon { color: #dc2626; } } }
+      .nav-item--theme  { color: #6b7280; &:hover { background: #f3f4f6; color: #374151; mat-icon { color: #374151; } } }
       .nav-item--toggle { color: #6b7280; font-size: 13px; &:hover { background: #f3f4f6; color: #374151; mat-icon { color: #374151; } } }
     }
     .shell--collapsed .sidebar__footer { padding: 10px 8px; }
@@ -243,10 +250,27 @@ export class AppComponent {
   /** État réduit de la sidebar, persisté dans localStorage */
   readonly collapsed = signal<boolean>(localStorage.getItem('sidebar-collapsed') === 'true');
 
+  /** Mode sombre — localStorage, mode clair par défaut */
+  readonly darkMode = signal<boolean>(localStorage.getItem('dark-mode') === 'true');
+
+  constructor() {
+    effect(() => {
+      document.documentElement.classList.toggle('dark-theme', this.darkMode());
+    });
+  }
+
   toggleSidebar(): void {
     this.collapsed.update(v => {
       const next = !v;
       localStorage.setItem('sidebar-collapsed', String(next));
+      return next;
+    });
+  }
+
+  toggleDarkMode(): void {
+    this.darkMode.update(v => {
+      const next = !v;
+      localStorage.setItem('dark-mode', String(next));
       return next;
     });
   }

@@ -322,6 +322,77 @@ public class PublicMenuController {
     }
 
     /**
+     * Checklist bar : lignes BAR en attente pour un restaurant.
+     * Le token de table {@code t} est utilisé pour résoudre le restaurant (pas d'auth requise).
+     */
+    @GetMapping("/bar")
+    public ResponseEntity<?> getBarLines(@RequestParam String t) {
+        RestaurantTable ref = tableRepository.findByQrToken(t)
+                .or(() -> tableRepository.findByLabelIgnoreCase(t))
+                .orElseThrow(() -> new IllegalArgumentException("Token invalide"));
+        UUID restaurantId = ref.getRestaurant().getId();
+
+        var statuses = List.of(
+                Order.OrderStatus.CONFIRMED,
+                Order.OrderStatus.IN_PROGRESS,
+                Order.OrderStatus.READY
+        );
+        var result = orderRepository.findActiveByRestaurantId(restaurantId, statuses).stream()
+                .map(o -> {
+                    var lines = o.getLines().stream()
+                            .filter(l -> "BAR".equals(l.getDestination()))
+                            .filter(l -> l.getStatus() != com.orderandpay.entity.OrderLine.LineStatus.CANCELLED
+                                      && l.getStatus() != com.orderandpay.entity.OrderLine.LineStatus.SERVED)
+                            .map(l -> {
+                                java.util.LinkedHashMap<String, Object> lm = new java.util.LinkedHashMap<>();
+                                lm.put("id",          l.getId().toString());
+                                lm.put("productName", l.getProduct().getName());
+                                lm.put("quantity",    l.getQuantity());
+                                lm.put("status",      l.getStatus().name());
+                                lm.put("notes",       l.getNotes());
+                                return lm;
+                            })
+                            .toList();
+                    if (lines.isEmpty()) return null;
+                    java.util.LinkedHashMap<String, Object> om = new java.util.LinkedHashMap<>();
+                    om.put("orderId",     o.getId().toString());
+                    om.put("orderNumber", o.getOrderNumber());
+                    om.put("tableLabel",  o.getTable() != null ? o.getTable().getLabel() : "");
+                    om.put("confirmedAt", o.getConfirmedAt() != null ? o.getConfirmedAt().toString() : null);
+                    om.put("lines",       lines);
+                    return om;
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Marque une ligne BAR comme prête (PENDING → READY) depuis l'app mobile du serveur.
+     * Le token {@code t} valide l'appartenance au restaurant.
+     */
+    @PatchMapping("/bar/orders/{orderId}/lines/{lineId}/ready")
+    @org.springframework.transaction.annotation.Transactional
+    public ResponseEntity<?> markBarLineReady(
+            @PathVariable UUID orderId,
+            @PathVariable UUID lineId,
+            @RequestParam String t) {
+
+        RestaurantTable ref = tableRepository.findByQrToken(t)
+                .or(() -> tableRepository.findByLabelIgnoreCase(t))
+                .orElseThrow(() -> new IllegalArgumentException("Token invalide"));
+        UUID restaurantId = ref.getRestaurant().getId();
+
+        orderRepository.findWithLines(orderId, restaurantId)
+                .orElseThrow(() -> new IllegalArgumentException("Commande introuvable"));
+
+        orderService.updateLineStatus(restaurantId, orderId, lineId,
+                com.orderandpay.entity.OrderLine.LineStatus.READY);
+
+        return ResponseEntity.ok(Map.of("lineId", lineId.toString(), "status", "READY"));
+    }
+
+    /**
      * Permet au client de récupérer l'état initial de sa commande pour la page de suivi.
      */
     @GetMapping("/orders/{orderId}")

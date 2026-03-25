@@ -54,6 +54,9 @@ public class OrderLine {
 
     private String notes;
 
+    /** Snapshot de la destination au moment de la commande : KITCHEN ou BAR. */
+    @Column(nullable = false, length = 20) @Builder.Default private String destination = "KITCHEN";
+
     @OneToMany(mappedBy = "orderLine", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<OrderLineOption> selectedOptions = new ArrayList<>();
@@ -64,7 +67,7 @@ public class OrderLine {
     // ── Factory ───────────────────────────────────────────────────────────────
 
     public static OrderLine from(Order order, Product product, short qty, String notes,
-                                 List<OrderLineOption> options) {
+                                 List<OrderLineOption> options, String destination) {
         // Prix unitaire HT = prix de base + somme des surcoûts d'options
         BigDecimal optionsDeltaHt = options.stream()
                 .map(OrderLineOption::getPriceDeltaHt)
@@ -90,6 +93,7 @@ public class OrderLine {
                 .lineTotalHt(lineHt)
                 .lineTotalTtc(lineTtc)
                 .notes(notes)
+                .destination(destination != null ? destination : "KITCHEN")
                 .build();
 
         options.forEach(o -> o.setOrderLine(line));
@@ -98,7 +102,7 @@ public class OrderLine {
     }
 
     public static OrderLine from(Order order, Product product, short qty, String notes) {
-        return from(order, product, qty, notes, List.of());
+        return from(order, product, qty, notes, List.of(), "KITCHEN");
     }
 
     public enum LineStatus { PENDING, COOKING, READY, SERVED, CANCELLED }

@@ -49,6 +49,7 @@ public class OrderController {
                 .map(o -> {
                     var lines = o.getLines().stream()
                             .filter(l -> l.getStatus() != OrderLine.LineStatus.CANCELLED)
+                            .filter(l -> !"BAR".equals(l.getDestination())) // cuisine seulement
                             .map(l -> {
                                 java.util.LinkedHashMap<String, Object> lm = new java.util.LinkedHashMap<>();
                                 lm.put("id", l.getId().toString());
@@ -64,6 +65,8 @@ public class OrderController {
                                 return lm;
                             })
                             .toList();
+                    // N'inclure la commande que si elle a des lignes cuisine
+                    if (lines.isEmpty()) return null;
                     java.util.LinkedHashMap<String, Object> om = new java.util.LinkedHashMap<>();
                     om.put("orderId", o.getId().toString());
                     om.put("orderNumber", o.getOrderNumber());
@@ -74,6 +77,51 @@ public class OrderController {
                     om.put("lines", lines);
                     return (Map<String, Object>) om;
                 })
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
+    /** Vue bar : lignes BAR en attente, pour la checklist du serveur sur l'app mobile. */
+    @GetMapping("/bar")
+    @PreAuthorize("hasAnyRole('WAITER','KITCHEN','MANAGER','OWNER')")
+    public List<Map<String, Object>> listBarLines() {
+        var statuses = List.of(
+            Order.OrderStatus.CONFIRMED,
+            Order.OrderStatus.IN_PROGRESS,
+            Order.OrderStatus.READY
+        );
+        return orderRepository.findActiveByRestaurantId(TenantContext.getCurrentTenant(), statuses)
+                .stream()
+                .map(o -> {
+                    var lines = o.getLines().stream()
+                            .filter(l -> "BAR".equals(l.getDestination()))
+                            .filter(l -> l.getStatus() != OrderLine.LineStatus.CANCELLED
+                                      && l.getStatus() != OrderLine.LineStatus.SERVED)
+                            .map(l -> {
+                                java.util.LinkedHashMap<String, Object> lm = new java.util.LinkedHashMap<>();
+                                lm.put("id", l.getId().toString());
+                                lm.put("productName", l.getProduct().getName());
+                                lm.put("quantity", l.getQuantity());
+                                lm.put("status", l.getStatus().name());
+                                lm.put("notes", l.getNotes());
+                                lm.put("options", l.getSelectedOptions().stream()
+                                        .map(opt -> opt.getOptionName() != null
+                                                ? opt.getOptionName() + " : " + opt.getLabel()
+                                                : opt.getLabel())
+                                        .toList());
+                                return lm;
+                            })
+                            .toList();
+                    if (lines.isEmpty()) return null;
+                    java.util.LinkedHashMap<String, Object> om = new java.util.LinkedHashMap<>();
+                    om.put("orderId", o.getId().toString());
+                    om.put("orderNumber", o.getOrderNumber());
+                    om.put("tableLabel", o.getTable() != null ? o.getTable().getLabel() : "");
+                    om.put("confirmedAt", o.getConfirmedAt() != null ? o.getConfirmedAt().toString() : null);
+                    om.put("lines", lines);
+                    return (Map<String, Object>) om;
+                })
+                .filter(java.util.Objects::nonNull)
                 .toList();
     }
 

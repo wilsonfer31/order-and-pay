@@ -13,7 +13,7 @@ import {
   ModalController, ViewWillEnter
 } from '@ionic/angular/standalone';
 import { addIcons }          from 'ionicons';
-import { cartOutline, addCircleOutline, removeCircleOutline, arrowForwardOutline, listOutline, chevronBackOutline, cameraOutline, checkmarkCircleOutline } from 'ionicons/icons';
+import { cartOutline, addCircleOutline, removeCircleOutline, arrowForwardOutline, listOutline, chevronBackOutline, cameraOutline, checkmarkCircleOutline, wineOutline } from 'ionicons/icons';
 import { FormsModule }       from '@angular/forms';
 import { switchMap }         from 'rxjs';
 import { MenuService, Category, Product } from '../../services/menu.service';
@@ -37,7 +37,7 @@ import { OptionPickerModal }              from './option-picker.modal';
     <ion-buttons slot="start">
       <ion-back-button defaultHref="/scan" text="Tables"></ion-back-button>
     </ion-buttons>
-    <ion-title>Notre Carte — {{ tableLabel() }}</ion-title>
+    <ion-title>{{ tableLabel() }}</ion-title>
   </ion-toolbar>
   <ion-toolbar>
     <div class="search-wrapper">
@@ -339,7 +339,7 @@ export class MenuPage implements OnInit, ViewWillEnter {
   });
 
   constructor() {
-    addIcons({ cartOutline, addCircleOutline, removeCircleOutline, arrowForwardOutline, listOutline, chevronBackOutline, cameraOutline, checkmarkCircleOutline });
+    addIcons({ cartOutline, addCircleOutline, removeCircleOutline, arrowForwardOutline, listOutline, chevronBackOutline, cameraOutline, checkmarkCircleOutline, wineOutline });
   }
 
   ngOnInit(): void {
@@ -398,6 +398,10 @@ export class MenuPage implements OnInit, ViewWillEnter {
 
   goToTableOrders(): void {
     this.router.navigate(['/table-orders'], { queryParams: { t: this.tableToken() } });
+  }
+
+  goToBar(): void {
+    this.router.navigate(['/bar'], { queryParams: { t: this.tableToken() } });
   }
 
   uploadProductImage(event: Event, product: Product): void {

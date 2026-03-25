@@ -40,6 +40,7 @@ public class CategoryController {
         cat.setRestaurant(restaurant);
         cat.setName(dto.name());
         cat.setSortOrder(dto.sortOrder());
+        cat.setDestination(dto.destination() != null ? dto.destination() : "KITCHEN");
         cat.setVisible(true);
         return ResponseEntity.status(201).body(categoryRepository.save(cat));
     }
@@ -54,6 +55,7 @@ public class CategoryController {
                 .map(c -> {
                     c.setName(dto.name());
                     c.setSortOrder(dto.sortOrder());
+                    c.setDestination(dto.destination() != null ? dto.destination() : "KITCHEN");
                     return ResponseEntity.ok(categoryRepository.save(c));
                 })
                 .orElse(ResponseEntity.notFound().build());

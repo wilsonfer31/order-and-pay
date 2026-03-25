@@ -32,8 +32,11 @@ public class Category {
     @Column(name = "image_url", length = 500)
     private String imageUrl;
 
-    @Column(name = "sort_order") @Builder.Default private short sortOrder = 0;
-    @Column(name = "is_visible") @Builder.Default private boolean visible = true;
+    @Column(name = "sort_order")  @Builder.Default private short sortOrder   = 0;
+    @Column(name = "is_visible")  @Builder.Default private boolean visible     = true;
+
+    /** Destination des lignes de commande pour cette catégorie : KITCHEN (défaut) ou BAR. */
+    @Column(nullable = false, length = 20) @Builder.Default private String destination = "KITCHEN";
 
     @Column(name = "created_at", updatable = false) @Builder.Default private Instant createdAt = Instant.now();
 

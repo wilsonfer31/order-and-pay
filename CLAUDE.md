@@ -150,13 +150,21 @@ Each `Category` has a `destination` field (`KITCHEN` or `BAR`, default `KITCHEN`
 - **Admin Menu CMS** — CUISINE/BAR selector on category form; BAR badge on category list
 - `OrderService.updateLineStatus()` triggers IN_PROGRESS on both COOKING (kitchen) and READY (bar lines that skip COOKING)
 
+### Kitchen push notifications (admin-web)
+When a new order arrives (`ORDER_CREATED` over WebSocket), the kitchen screen triggers a browser system notification — even when the tab is in the background.
+
+- **Service Worker** — `admin-web/src/push.worker.js` registered at `/push.worker.js` (exposed via `angular.json` assets). Handles `notificationclick`: focuses the `/kitchen` tab or opens it.
+- **`KitchenNotificationService`** (`core/services/kitchen-notification.service.ts`) — calls `Notification.requestPermission()`, registers the SW, and displays notifications via `swReg.showNotification()` (SW path, works in background) or `new Notification()` (fallback).
+- **Kitchen component** — bell icon button in the header to request permission on first visit. `notifPermission` signal reflects live state (amber when granted). On `ORDER_CREATED`, calls `notif.notify(tableLabel, lines)`.
+- No VAPID or server-side push required — the WebSocket already runs in the page; the SW is only needed for `notificationclick` focus handling.
+
 ### Tax calculations
 French TVA rates (5.5%, 10%, 20%) are computed in `TaxService.java` and applied per `OrderLine`.
 
 ## Admin Web Features
 
 - **Dashboard** (`/`) — KPI cards (CA TTC, panier moyen, marge brute, TVA), bar chart (30-day revenue), table status grid, real-time activity feed with expandable ORDER_CREATED details
-- **Kitchen** (`/kitchen`) — live order queue with STOMP updates; affiche les options choisies ("Viande : Bleu") en orange sous chaque ticket; kitchen-only lines (BAR lines filtered out)
+- **Kitchen** (`/kitchen`) — live order queue with STOMP updates; affiche les options choisies ("Viande : Bleu") en orange sous chaque ticket; kitchen-only lines (BAR lines filtered out); push notifications browser sur `ORDER_CREATED` (voir ci-dessous)
 - **Floor editor** (`/floor`) — drag-and-drop table layout
 - **Orders history** (`/orders`) — date-range filter, expandable order list, KPI summary
 - **Menu CMS** (`/menu`) — product and category management with options editor (groupes + valeurs, UUIDs préservés); CUISINE/BAR destination selector per category

@@ -10,15 +10,6 @@ Fonctionnalités à implémenter, groupées par domaine. Les éléments marqués
 
 ## Observabilité & Debugging
 
-### ~~Logs structurés (JSON) + corrélation par requête~~ ✅
-Logs JSON en prod (Logback + Logstash encoder), `X-Request-Id` injecté par nginx, `requestId` + `restaurantId` dans chaque entrée via MDC.
-
-### ~~Dashboard de logs Docker (Loki + Grafana)~~ ✅
-Stack Loki + Promtail + Grafana dans `docker-compose.monitoring.yml`. Dashboard pré-configuré avec vue logs temps réel, filtre erreurs, volume par service.
-
-### ~~Métriques système (Prometheus + Grafana)~~ ✅
-Prometheus scrape `/api/actuator/prometheus` (Spring Boot Actuator + Micrometer). Dashboard pré-configuré : RAM/CPU par container (cAdvisor), métriques machine hôte (Node Exporter), JVM Heap, requêtes HTTP/s. Stack générique réutilisable dans `../monitoring-stack/`.
-
 ### Sentry (erreurs frontend + backend)
 En cas d'exception non gérée, rien ne remonte actuellement.
 - Intégrer `@sentry/angular` dans `admin-web` et `mobile-app`
@@ -34,11 +25,8 @@ En cas d'exception non gérée, rien ne remonte actuellement.
 
 ## Fonctionnalités métier (schéma prêt, UI manquante)
 
-### Options produit — tailles, cuissons, suppléments **[SCHEMA]**
-Tables `product_options` et `product_option_values` existent mais aucune UI ne permet de les configurer ni de les sélectionner à la commande.
-- Admin : éditeur d'options dans le Menu CMS (ex. "Cuisson" → Saignant / À point / Bien cuit)
-- Mobile : sélecteur d'options lors de l'ajout au panier (déjà implémenté ✅)
-- Backend : intégrer `order_line_options` dans le calcul du prix de la commande
+### Options produit — prix par valeur **[SCHEMA]**
+- Backend : intégrer `order_line_options` dans le calcul du prix de la commande (surcoût par valeur sélectionnée)
 
 ### Gestion du stock **[SCHEMA]**
 Colonnes `stock_managed` et `stock_qty` existent sur `products` mais jamais décrémentées ni affichées.
@@ -52,9 +40,6 @@ Le statut `RESERVED` existe sur les tables mais aucun système de réservation.
 - Formulaire de réservation dans l'admin (date, heure, couverts, nom)
 - Blocage automatique de la table à l'heure prévue
 - Vue calendrier dans l'admin
-
-### ~~Gestion du personnel (utilisateurs)~~ ✅ **[SCHEMA]**
-Page "Équipe" dans l'admin : CRUD complet (créer / modifier / désactiver / supprimer). Attribution des rôles (OWNER, MANAGER, WAITER, KITCHEN, CASHIER) avec aperçu des pages accessibles par rôle. Sidebar filtrée dynamiquement selon le rôle de l'utilisateur connecté. Fix 401 pour les rôles non-OWNER (`BadCredentialsException` → handler dédié dans `GlobalExceptionHandler`).
 
 ### Paramètres du restaurant **[SCHEMA]**
 Champs `siret`, `tva_intra`, `logo_url`, `address`, `phone`, `email` présents mais non éditables.
@@ -75,8 +60,6 @@ Table `daily_stats` avec `top_products` (JSONB) calculée en base mais jamais in
 ---
 
 ## App mobile — fonctionnalités serveur
-
-> Toutes ces fonctionnalités sont destinées aux serveurs qui utilisent l'app mobile en salle.
 
 ### Authentification du serveur sur l'app mobile
 Actuellement l'app mobile n'a pas d'écran de connexion — n'importe qui avec l'URL peut l'utiliser.
@@ -125,28 +108,20 @@ Actuellement le serveur doit aller sur l'admin-web pour marquer une commande pay
 - Saisie du pourboire optionnelle
 - Transition vers l'état `PAID` + libération de la table en une action
 
-### Transfert de commande entre serveurs
-Un serveur prend sa pause, un collègue reprend ses tables.
-- Bouton "Transférer mes tables" dans l'app mobile (sélection du collègue)
-- Log de transfert dans `audit_log`
-- L'admin peut aussi forcer le transfert depuis la page Équipe
-
 ### Chrono de service par table
 Savoir depuis combien de temps une table est occupée aide à gérer le rythme de service.
 - Affichage du temps écoulé depuis `session_started_at` sur chaque carte table
 - Alerte visuelle si une table dépasse un seuil configurable (ex. 2h)
-- Historique du temps moyen par service dans les stats admin
 
 ### Recherche rapide dans le menu
 Pour les restaurants avec beaucoup de références, défiler dans les catégories est lent.
 - Barre de recherche full-text dans le menu mobile (nom produit, catégorie)
 - Résultats filtrés en temps réel, sélection directe pour ajout au panier
 
-### Mode hors-ligne (PWA offline)
-Si le wifi du restaurant coupe, le serveur ne peut plus passer de commandes.
-- Service Worker avec cache du menu (lecture seule offline)
-- File d'attente des commandes locales sync dès le retour réseau
-- Indicateur visuel "Hors-ligne" dans l'app avec statut de reconnexion
+### QR code par table — scan pour sélection rapide
+- Scanner le QR code d'une table avec l'app mobile ouvre directement cette table (sans chercher dans la liste)
+- Régénérer le token depuis l'admin (floor editor)
+- Afficher le QR actuel dans l'admin pour impression/plastification à coller sur la table
 
 ---
 
@@ -172,26 +147,12 @@ Augmente mécaniquement le ticket moyen. Le serveur reçoit une suggestion conte
 Argument vendeur pour les managers. Aujourd'hui aucun POS entrée de gamme ne propose ça.
 - Dashboard individuel par serveur connecté : CA généré, nb de tables servies, ticket moyen, pourboires cumulés, temps de service moyen
 - Vue manager dans l'admin : classement des serveurs sur la période, identification des écarts
-- Gamification légère : badge "Meilleur serveur du mois" visible dans l'app
 
-### Routage par station cuisine ⭐
-Les restos avec plusieurs postes (entrées, grillade, pâtisserie) reçoivent aujourd'hui tout sur un seul écran — le chef doit trier manuellement.
+### Coloration par station cuisine ⭐
+Les restos avec plusieurs postes (entrées, grillade, pâtisserie) reçoivent aujourd'hui tout sur un seul écran sans distinction visuelle. Écrans séparés par station rejetés : trop de coordination inter-écrans en service chaud, risque de décalage de sortie sur les commandes mixtes.
 - Chaque produit se voit assigner une station dans le Menu CMS (ex. "Viande" → grillade, "Dessert" → pâtisserie)
-- Écran cuisine séparé par station, accessible depuis `/kitchen?station=grillade`
-- Les lignes non concernées par la station sont masquées
-
-### ~~Séparation boissons / cuisine~~ ✅ ⭐
-Les boissons ne passent pas par la cuisine — elles sont préparées par le serveur ou le bar.
-- Chaque **catégorie** du Menu CMS a une destination : `CUISINE` ou `BAR` (sélecteur dans le formulaire catégorie, badge BAR dans la liste)
-- Migration `V10__category_destination.sql` : colonne `destination VARCHAR(20)` sur `categories` et `order_lines` (snapshot à la commande)
-- À la confirmation, les lignes sont routées automatiquement par `OrderService` :
-  - Lignes `KITCHEN` → écran `/kitchen` (les commandes sans lignes cuisine n'apparaissent pas)
-  - Lignes `BAR` → checklist dans l'app mobile (`/bar?t=xxx`)
-- `GET /orders` (cuisine admin) filtre désormais les lignes BAR et ignore les commandes sans lignes cuisine
-- `GET /orders/bar` (admin authentifié) : lignes BAR seulement, excluant CANCELLED/SERVED
-- `GET /public/bar?t=xxx` : lignes BAR groupées par commande/table (app mobile, sans auth)
-- `PATCH /public/bar/orders/{orderId}/lines/{lineId}/ready?t=xxx` : marquer une boisson prête
-- Page `/bar` dans l'app mobile : checklist boissons par table, bouton "Prêt" par ligne, pull-to-refresh, bouton wine-outline dans la toolbar du menu
+- Sur l'écran cuisine unique, chaque ligne est colorée selon sa station (grillade = rouge, froid = bleu, pâtisserie = jaune)
+- Toggle optionnel "Tout / Grillade / Froid / Pâtisserie" pour filtrer sans masquer le contexte de la commande
 
 ### Prix dynamiques (happy hour, événements)
 Différenciateur fort vs les POS qui nécessitent une intervention manuelle pour changer les prix.
@@ -200,23 +161,11 @@ Différenciateur fort vs les POS qui nécessitent une intervention manuelle pour
 - Affichage "Happy hour" sur les produits concernés dans le menu mobile
 - Rapport des remises accordées dans les stats
 
-### Intégration commandes livraison (Uber Eats / Deliveroo)
-Les restos gèrent aujourd'hui deux flux séparés (tablette livraison + écran cuisine salle). Unifier les deux est un argument de vente massif.
-- Webhook entrant depuis les plateformes de livraison → injection dans le flux commande normal
-- Commandes livraison apparaissent sur l'écran cuisine avec un badge distinctif (🛵)
-- Statistiques unifiées salle + livraison dans le dashboard
-
 ### Multi-établissements (groupes & franchises)
 Un compte OWNER peut gérer plusieurs restaurants. Indispensable pour les groupes, multiplie l'ARR par adresse.
 - Sélecteur de restaurant au login pour les comptes multi-sites
 - Dashboard agrégé : vision consolidée CA + commandes sur tous les établissements
 - Menu partageable entre établissements (template de carte)
-
-### White-label complet
-Le restaurant vend son propre outil, pas le nôtre. Argument pour les groupes et les consultants qui revendent la solution.
-- Nom de l'app, couleurs, logo et domaine personnalisés par tenant
-- Emails/notifications sans mention de la marque sous-jacente
-- Configurable depuis les paramètres restaurant sans redéploiement
 
 ---
 
@@ -227,15 +176,8 @@ Le restaurant vend son propre outil, pas le nôtre. Argument pour les groupes et
 - Impression d'un reçu client à la demande depuis l'admin ou l'app mobile du serveur
 - Intégration via `PrintNode` ou `Star Micronics` API
 
-### Notifications push pour la cuisine (admin-web)
-Quand une nouvelle commande arrive, le browser de la cuisine n'est pas forcément actif.
-- Web Push Notifications via l'API `PushManager` du navigateur
-- Un Service Worker dans `admin-web` reçoit les notifications en arrière-plan
-
-### Historique des modifications de prix
-Quand un prix produit change, les commandes historiques utilisent le snapshot mais il n'y a aucune trace de l'évolution.
-- Table `product_price_history` (produit, ancien prix HT, nouveau prix HT, date, modifié par)
-- Affichage dans le Menu CMS
+### ~~Notifications push pour la cuisine (admin-web)~~ ✅
+Service Worker (`push.worker.js`) + `KitchenNotificationService`. Bouton cloche dans le header cuisine pour activer la permission. Notification système sur chaque `ORDER_CREATED` (tableLabel + liste des plats), fonctionne onglet en arrière-plan. Clic sur notif → focus onglet cuisine.
 
 ### Mode "Fermeture de service"
 Fin de service : clôturer toutes les commandes ouvertes, générer un récapitulatif de la journée.
@@ -243,23 +185,9 @@ Fin de service : clôturer toutes les commandes ouvertes, générer un récapitu
 - Génération d'un rapport PDF (CA, TVA, nb couverts, top produits)
 - Archivage des données du jour dans `daily_stats`
 
-### Paiement fractionné (split bill) **[SCHEMA]**
-`PaymentMethod.SPLIT` existe dans le schéma mais aucune logique.
-- Interface de partage de l'addition dans l'admin et dans l'app mobile : choisir les lignes par convive
-- Générer N tickets distincts
-
-### QR code par table — scan pour sélection rapide
-Actuellement le token QR est statique et sans usage depuis la refonte serveur.
-- Scanner le QR code d'une table avec l'app mobile ouvre directement cette table (sans chercher dans la liste)
-- Régénérer le token depuis l'admin (floor editor)
-- Afficher le QR actuel dans l'admin pour impression/plastification à coller sur la table
-
 ---
 
 ## Améliorations UX
-
-### ~~Mode sombre dans l'admin~~ ✅
-`mat.define-dark-theme()` appliqué sous `.dark-theme` sur `<html>`. Bouton lune/soleil dans la sidebar footer. Persisté en `localStorage` (`dark-mode`), fallback sur `prefers-color-scheme`. Overrides CSS pour toutes les couleurs hardcodées (dashboard, orders, staff, menu CMS, floor editor).
 
 ### Raccourcis clavier dans la cuisine
 - `K` → passer la ligne en COOKING, `R` → READY, `S` → SERVED (navigation au clavier pour les écrans tactiles/claviers)
@@ -270,12 +198,6 @@ Actuellement on filtre par date uniquement.
 
 ### Détail du calcul TVA
 - Affichage du détail TVA par taux (5.5%, 10%, 20%) dans l'app mobile du serveur (utile lors de l'encaissement à table)
-
-### ~~Confirmation visuelle lors de l'annulation de commande~~ ✅
-`MatDialog` avec `ConfirmDialogComponent` partagé dans l'admin (cuisine, menu CMS). `AlertController` Ionic dans la mobile app (suivi commande, commandes table). Plus aucun `window.confirm()` ni `alert()` natif.
-
-### ~~Redirection post-login selon le rôle~~ ✅
-Après connexion, l'utilisateur arrive sur la première page autorisée pour son rôle (KITCHEN → `/kitchen`, OWNER → `/dashboard`, etc.). Le `authGuard` bloque aussi l'accès aux pages non autorisées et redirige vers la bonne page.
 
 ### Thème de l'app mobile configurable par restaurant
 - Couleur primaire et logo du restaurant injectés dans le thème Ionic (depuis les paramètres admin)
@@ -288,10 +210,6 @@ Après connexion, l'utilisateur arrive sur la première page autorisée pour son
 ### CI/CD (GitHub Actions)
 - Pipeline : build → tests → lint → build Docker → push sur registry
 - Déploiement automatique sur push sur `main` (via SSH + `docker-compose pull && up`)
-
-### ~~Backup automatique PostgreSQL~~ ✅
-Container `backup` dans `docker-compose.prod.yml` — `pg_dump` via cron, rétention configurable (`BACKUP_KEEP_DAYS`). Upload S3/Scaleway/R2 optionnel via variables `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, etc.
-- [ ] Test de restauration mensuel documenté (reste à faire)
 
 ### Variables d'environnement typées et validées au démarrage
 - Classe `@ConfigurationProperties` validée avec `@Validated` + `@NotBlank` pour chaque variable critique

@@ -8,6 +8,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatDialog } from '@angular/material/dialog';
 import { WebSocketService } from '../../core/services/websocket.service';
 import { AuthService } from '../../core/services/auth.service';
+import { KitchenNotificationService } from '../../core/services/kitchen-notification.service';
 import { ConfirmDialogComponent } from '../../shared/confirm-dialog/confirm-dialog.component';
 import { Subject, takeUntil } from 'rxjs';
 
@@ -58,6 +59,12 @@ interface KitchenTicket {
     </div>
     <div class="kitchen-header__right">
       <span class="kitchen-clock">{{ currentTime() }}</span>
+      <button class="notif-btn"
+              [class.notif-btn--on]="notifPermission() === 'granted'"
+              [title]="notifBtnTitle()"
+              (click)="toggleNotifications()">
+        <mat-icon>{{ notifPermission() === 'granted' ? 'notifications_active' : 'notifications_off' }}</mat-icon>
+      </button>
       <span class="ws-dot" [class.ws-dot--on]="wsConnected()"></span>
       <span class="ws-label">{{ wsConnected() ? 'Temps réel' : 'Déconnecté' }}</span>
     </div>
@@ -208,6 +215,15 @@ interface KitchenTicket {
     }
     .ws-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; }
     .ws-dot--on { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+    .notif-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 34px; height: 34px; border-radius: 8px; border: 1px solid #334155;
+      background: #1e293b; color: #64748b; cursor: pointer; transition: all .2s;
+    }
+    .notif-btn:hover { background: #334155; color: #94a3b8; }
+    .notif-btn--on { border-color: #f59e0b; color: #f59e0b; }
+    .notif-btn--on:hover { background: #451a03; }
+    .notif-btn mat-icon { font-size: 18px; width: 18px; height: 18px; }
 
     .kanban {
       display: grid; grid-template-columns: repeat(3, 1fr);
@@ -311,12 +327,22 @@ export class KitchenComponent implements OnInit, OnDestroy {
   private ws      = inject(WebSocketService);
   private auth    = inject(AuthService);
   private ngZone  = inject(NgZone);
+  private notif   = inject(KitchenNotificationService);
   private destroy$ = new Subject<void>();
 
-  orders      = signal<KitchenOrder[]>([]);
-  wsConnected = signal(false);
-  now         = signal(Date.now());
+  orders         = signal<KitchenOrder[]>([]);
+  wsConnected    = signal(false);
+  now            = signal(Date.now());
+  notifPermission = signal<NotificationPermission>(
+    'Notification' in window ? Notification.permission : 'denied'
+  );
   private clockInterval?: ReturnType<typeof setInterval>;
+
+  notifBtnTitle = computed(() =>
+    this.notifPermission() === 'granted'
+      ? 'Notifications activées — cliquer pour info'
+      : 'Activer les notifications sonores'
+  );
 
   private toTickets(orders: KitchenOrder[]): KitchenTicket[] {
     return orders.flatMap(o =>
@@ -373,6 +399,12 @@ export class KitchenComponent implements OnInit, OnDestroy {
     this.toTickets(this.orders()).filter(t => t.lineStatus === 'READY')
   );
 
+  async toggleNotifications(): Promise<void> {
+    if (this.notifPermission() === 'granted') return; // déjà activé, rien à faire
+    const result = await this.notif.requestPermission();
+    this.notifPermission.set(result);
+  }
+
   ngOnInit(): void {
     this.loadOrders();
     this.ws.connect();
@@ -403,6 +435,7 @@ export class KitchenComponent implements OnInit, OnDestroy {
   private applyEvent(event: any): void {
     if (event.eventType === 'ORDER_CREATED') {
       this.loadOrders();
+      this.notif.notify(event.tableLabel ?? 'Table inconnue', event.lines);
     } else if (event.eventType === 'ORDER_STATUS_CHANGED') {
       const terminal = ['DELIVERED', 'PAID', 'CANCELLED'];
       if (terminal.includes(event.orderStatus)) {
